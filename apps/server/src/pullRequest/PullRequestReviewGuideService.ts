@@ -23,6 +23,7 @@ import {
   type ThreadPullRequestKey,
 } from "@t3tools/contracts";
 import type { ReviewGuideStackLayer } from "@t3tools/provider-core/server/textGeneration";
+import { withoutRemoteUrlCredentials } from "@t3tools/shared/cloneUrl";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
 
@@ -177,7 +178,9 @@ const make = Effect.gen(function* () {
             args: ["remote", "get-url", "--", name],
           })
           .pipe(
-            Effect.map((result) => result.stdout.trim() === locator.remoteUrl),
+            Effect.map(
+              (result) => withoutRemoteUrlCredentials(result.stdout.trim()) === locator.remoteUrl,
+            ),
             Effect.orElseSucceed(() => false),
           ),
     ).pipe(Effect.map(Option.getOrUndefined));
