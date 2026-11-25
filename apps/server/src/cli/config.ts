@@ -382,7 +382,6 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
   const desktopAppUpdate = bootstrap?.desktopAppUpdate;
   const desktopBrowserFd = bootstrap?.desktopBrowserFd;
   const desktopBrowserControlFd = bootstrap?.desktopBrowserControlFd;
-  const resourceMonitorPath = bootstrap?.resourceMonitorPath;
   const autoBootstrapProjectFromCwd = Option.getOrElse(
     resolveOptionPrecedence(
       Option.fromUndefinedOr(options?.forceAutoBootstrapProjectFromCwd),
@@ -533,7 +532,6 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
     ...(desktopAppUpdate === undefined ? {} : { desktopAppUpdate }),
     desktopBrowserFd,
     desktopBrowserControlFd,
-    resourceMonitorPath,
     autoBootstrapProjectFromCwd,
     logWebSocketEvents,
     tailscaleServeEnabled,

@@ -154,10 +154,6 @@ export function resolveResourceMonitorRustTargets(
   return [arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc"];
 }
 
-export function resourceMonitorExecutableName(platform: typeof BuildPlatform.Type): string {
-  return platform === "win" ? "t3-resource-monitor.exe" : "t3-resource-monitor";
-}
-
 const PLATFORM_CONFIG: Record<typeof BuildPlatform.Type, PlatformConfig> = {
   mac: {
     cliFlag: "--mac",
@@ -749,7 +745,6 @@ const WindowsPackagedPayloadValidationReason = Schema.Literals([
   "sidecar-missing",
   "sidecar-invalid",
   "unpacked-native-missing",
-  "resource-monitor-missing",
   "wsl-runtime-missing",
   "wsl-runtime-invalid",
   "file-limit-exceeded",
@@ -772,9 +767,6 @@ export class WindowsPackagedPayloadValidationError extends Schema.TaggedError<Wi
     }
     if (this.reason === "unpacked-native-missing") {
       return `Windows server sidecar is missing ${String(this.missingFiles?.length ?? 0)} unpacked native files.`;
-    }
-    if (this.reason === "resource-monitor-missing") {
-      return "Windows packaged payload is missing the resource monitor executable.";
     }
     if (this.reason === "wsl-runtime-missing") {
       return "Windows packaged payload is missing the WSL runtime archive or SHA-256 sidecar.";
@@ -1097,10 +1089,6 @@ export const DESKTOP_EXTRA_RESOURCES = [
   {
     from: "apps/desktop/prod-resources/cursor-sdk",
     to: "node_modules/@cursor",
-  },
-  {
-    from: "apps/desktop/prod-resources/resource-monitor",
-    to: "resource-monitor",
   },
 ] as const;
 export const LINUX_CAPTURE_EXTRA_RESOURCES = [
@@ -2362,89 +2350,6 @@ export const stageLinuxCaptureHelper = Effect.fn("stageLinuxCaptureHelper")(func
   }
 });
 
-export const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* (input: {
-  readonly repoRoot: string;
-  readonly stageResourcesDir: string;
-  readonly platform: typeof BuildPlatform.Type;
-  readonly arch: typeof BuildArch.Type;
-  readonly verbose: boolean;
-}) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const manifestPath = path.join(input.repoRoot, "native/resource-monitor/Cargo.toml");
-  const executableName = resourceMonitorExecutableName(input.platform);
-  const rustTargets = resolveResourceMonitorRustTargets(input.platform, input.arch);
-  const reuseResourceMonitor = yield* Config.Boolean("T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR").pipe(
-    Config.withDefault(false),
-  );
-  const builtBinaries: string[] = [];
-
-  for (const rustTarget of rustTargets) {
-    if (!reuseResourceMonitor) {
-      const spawnCommand = yield* resolveSpawnCommand("cargo", [
-        "build",
-        "--locked",
-        "--release",
-        "--manifest-path",
-        manifestPath,
-        "--target",
-        rustTarget,
-      ]);
-      yield* runCommand(
-        ChildProcess.make(spawnCommand.command, spawnCommand.args, {
-          cwd: input.repoRoot,
-          shell: spawnCommand.shell,
-        }),
-        {
-          label: `cargo build resource monitor (${rustTarget})`,
-          verbose: input.verbose,
-        },
-      );
-    }
-
-    const binaryPath = path.join(
-      input.repoRoot,
-      "native/resource-monitor/target",
-      rustTarget,
-      "release",
-      executableName,
-    );
-    if (!(yield* fs.exists(binaryPath))) {
-      return yield* new ResourceMonitorBuildOutputMissingError({
-        binaryPath,
-        rustTarget,
-        platform: input.platform,
-        arch: input.arch,
-      });
-    }
-    if (reuseResourceMonitor) {
-      yield* Effect.log(`[desktop-artifact] Reusing cached resource monitor (${rustTarget}).`);
-    }
-    builtBinaries.push(binaryPath);
-  }
-
-  const destinationDirectory = path.join(input.stageResourcesDir, "resource-monitor");
-  const destinationPath = path.join(destinationDirectory, executableName);
-  yield* fs.remove(destinationDirectory, { recursive: true, force: true }).pipe(Effect.ignore);
-  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
-
-  if (builtBinaries.length === 1) {
-    yield* fs.copyFile(builtBinaries[0]!, destinationPath);
-  } else {
-    yield* runCommand(
-      ChildProcess.make("lipo", ["-create", ...builtBinaries, "-output", destinationPath]),
-      {
-        label: "lipo resource monitor universal binary",
-        verbose: input.verbose,
-      },
-    );
-  }
-
-  if (input.platform !== "win") {
-    yield* fs.chmod(destinationPath, 0o755);
-  }
-});
-
 export const stageBrowserSecret = Effect.fn("stageBrowserSecret")(function* (input: {
   readonly repoRoot: string;
   readonly stageResourcesDir: string;
@@ -3457,19 +3362,6 @@ export const validateWindowsPackagedPayload = Effect.fn(
     });
   }
 
-  const resourceMonitorPath = path.join(
-    resourcesDir,
-    "resource-monitor",
-    resourceMonitorExecutableName("win"),
-  );
-  if (!(yield* isFile(resourceMonitorPath))) {
-    return yield* new WindowsPackagedPayloadValidationError({
-      reason: "resource-monitor-missing",
-      packagedAppDir,
-      missingFiles: ["resource-monitor/t3-resource-monitor.exe"],
-    });
-  }
-
   const wslArchivePath = path.join(resourcesDir, WSL_RUNTIME_ARCHIVE_NAME);
   const wslArchiveHashPath = path.join(resourcesDir, WSL_RUNTIME_ARCHIVE_HASH_NAME);
   const [hasWslArchive, hasWslArchiveHash] = yield* Effect.all([
@@ -3853,13 +3745,6 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   if (options.platform !== "win") {
     yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
   }
-  yield* stageResourceMonitor({
-    repoRoot,
-    stageResourcesDir,
-    platform: options.platform,
-    arch: options.arch,
-    verbose: options.verbose,
-  });
   if (options.platform === "linux") {
     for (const backend of ["kde", "hyprland"] as const)
       yield* stageLinuxCaptureHelper({

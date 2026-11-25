@@ -4,7 +4,7 @@ import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchema
 import { HostPowerSnapshot } from "./background.ts";
 import { DesktopUpdateChannelSchema, DesktopUpdateStateSchema } from "./ipc.ts";
 
-export const RESOURCE_MONITOR_PROTOCOL_VERSION = 3 as const;
+const RESOURCE_MONITOR_PROTOCOL_VERSION = 3 as const;
 
 export const HostResourcesSnapshot = Schema.Struct({
   sampledAt: NonNegativeInt,

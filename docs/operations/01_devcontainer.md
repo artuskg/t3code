@@ -5,7 +5,7 @@
 ## What works
 
 - `vp run dev` (open the printed pairing URL through the forwarded web port; in browser Codespaces, pass the forwarded origin via `T3CODE_DEV_ALLOWED_ORIGINS` if rejected).
-- Linux CI checks: focused `vp test run <files>`, `vp lint <files>`, package typechecks, `vp run build:desktop`, and the resource-monitor Cargo build and tests.
+- Linux CI checks: focused `vp test run <files>`, `vp lint <files>`, package typechecks, and `vp run build:desktop`.
 
 ## State and caching
 

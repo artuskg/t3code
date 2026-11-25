@@ -161,7 +161,7 @@ const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(fu
   const stageDistDir = path.join(tempDir, "dist");
   const packagedAppDir = path.join(stageDistDir, "win-unpacked");
   const resourcesDir = path.join(packagedAppDir, "resources");
-  yield* fs.makeDirectory(path.join(resourcesDir, "resource-monitor"), { recursive: true });
+  yield* fs.makeDirectory(resourcesDir, { recursive: true });
   yield* fs.copyFile(generatedAsarPath, path.join(resourcesDir, WINDOWS_SERVER_ASAR_RESOURCE));
   if (input.copyUnpackedNatives) {
     yield* fs.copy(
@@ -169,10 +169,6 @@ const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(fu
       path.join(resourcesDir, `${WINDOWS_SERVER_ASAR_RESOURCE}.unpacked`),
     );
   }
-  yield* fs.writeFileString(
-    path.join(resourcesDir, "resource-monitor/t3-resource-monitor.exe"),
-    "monitor",
-  );
   const appExecutableName = "t3code.exe";
   yield* fs.writeFileString(path.join(packagedAppDir, appExecutableName), "electron");
   yield* fs.writeFileString(path.join(packagedAppDir, "chrome_crashpad_handler.exe"), "crashpad");
@@ -1343,27 +1339,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.equal(nativeError.reason, "unpacked-native-missing");
         assert.deepStrictEqual(nativeError.missingFiles, [
           "server.asar.unpacked/node_modules/native/addon.node",
-        ]);
-
-        yield* fs.remove(nativePath, { recursive: true });
-        yield* fs.writeFileString(nativePath, "native-binary");
-        const resourceMonitorPath = path.join(
-          fixture.packagedAppDir,
-          "resources/resource-monitor/t3-resource-monitor.exe",
-        );
-        yield* fs.remove(resourceMonitorPath);
-        yield* fs.makeDirectory(resourceMonitorPath);
-
-        const resourceMonitorError = yield* validateWindowsPackagedPayload({
-          stageDistDir: fixture.stageDistDir,
-          appExecutableName: fixture.appExecutableName,
-          targetArch: "x64",
-          appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
-        }).pipe(Effect.flip);
-        assert.instanceOf(resourceMonitorError, WindowsPackagedPayloadValidationError);
-        assert.equal(resourceMonitorError.reason, "resource-monitor-missing");
-        assert.deepStrictEqual(resourceMonitorError.missingFiles, [
-          "resource-monitor/t3-resource-monitor.exe",
         ]);
       }),
     ),
