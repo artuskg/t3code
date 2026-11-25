@@ -2269,21 +2269,38 @@ describe("ClaudeAdapterV2 resume compaction", () => {
       assert.isFunction(canUseTool);
       const shellSafetyReason =
         "Dangerous rm operation not ruled out — the shell may read this command differently than it was parsed";
-      for (const [safetyIndex, { askRule, reason }] of [
-        { askRule: false, reason: shellSafetyReason },
-        { askRule: true, reason: shellSafetyReason },
+      // Fork: Full access denies removal warnings (even under an ask rule) and allows other asks.
+      for (const [safetyIndex, { askRule, reason, behavior }] of [
+        { askRule: false, reason: shellSafetyReason, behavior: "deny" },
+        { askRule: true, reason: shellSafetyReason, behavior: "deny" },
         {
           askRule: false,
           reason:
             "Dangerous rm operation on possibly-empty variable path: $TARGET\nUse a literal absolute path instead.",
+          behavior: "deny",
         },
-        { askRule: false, reason: "This shell -c script runs rm and could not be checked" },
-        { askRule: false, reason: "A permission rule denies a command in this shell -c script" },
+        {
+          askRule: false,
+          reason: "This shell -c script runs rm and could not be checked",
+          behavior: "deny",
+        },
+        {
+          askRule: false,
+          reason: "A permission rule denies a command in this shell -c script",
+          behavior: "deny",
+        },
         {
           askRule: false,
           reason:
             "Claude Code can't be sure it read this command the way the shell will, so it can't rule out a dangerous removal. Read the command, and don't go ahead if you can't tell what it does.",
+          behavior: "deny",
         },
+        {
+          askRule: false,
+          reason: "Command contains command substitution and could not be checked",
+          behavior: "allow",
+        },
+        { askRule: true, reason: "Permission rule Bash(*) requires approval", behavior: "allow" },
       ].entries()) {
         const safetyRequest = yield* runtime.events.pipe(
           Stream.filter((event) => event.type === "runtime_request.updated"),
@@ -2321,22 +2338,13 @@ describe("ClaudeAdapterV2 resume compaction", () => {
             Effect.map((event) => ({ type: "approval", event }) as const),
           ),
         );
-        assert.equal(safety.type, askRule ? "approval" : "decision");
+        assert.equal(safety.type, "decision", reason);
         if (safety.type === "decision") {
-          assert.equal(safety.result?.behavior, "deny");
+          assert.equal(safety.result?.behavior, behavior, reason);
           if (safety.result?.behavior === "deny") {
             assert.include(safety.result.message, reason);
             assert.notInclude(safety.result.message, "\u001b[");
           }
-        } else if (
-          Option.isSome(safety.event) &&
-          safety.event.value.type === "runtime_request.updated"
-        ) {
-          yield* runtime.respondToRuntimeRequest({
-            requestId: safety.event.value.runtimeRequest.id,
-            decision: "decline",
-          });
-          assert.equal((yield* Fiber.join(safetyDecision))?.behavior, "deny");
         }
         yield* Fiber.interrupt(safetyRequest);
       }
@@ -5367,6 +5375,31 @@ describe("ClaudeAdapterV2 background wake turns", () => {
 
         yield* start("/restricted-worktree", "auto");
         assert.equal(harness.getOpenedOptions()?.permissionMode, "auto");
+        // Fork: Auto hard-denies removal warnings and allows every other escalation.
+        for (const [index, { decisionReason, behavior }] of [
+          {
+            decisionReason: "Dangerous rm operation on possibly-empty variable path: $TARGET",
+            behavior: "deny",
+          },
+          {
+            decisionReason: "Permission rule Bash(git push:*) requires approval",
+            behavior: "allow",
+          },
+        ].entries()) {
+          const autoDecision = yield* Effect.promise(() =>
+            harness.getOpenedOptions()!.canUseTool!(
+              "Bash",
+              { command: "git status" },
+              {
+                signal: new AbortController().signal,
+                toolUseID: `auto-escalation-${index}`,
+                requestId: `request-auto-escalation-${index}`,
+                decisionReason,
+              },
+            ),
+          );
+          assert.equal(autoDecision?.behavior, behavior, decisionReason);
+        }
         yield* finish;
         assert.equal(notices().length, 0);
         assert.equal(resolveSettings.mock.calls.length, 0);
@@ -5434,8 +5467,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         yield* start("/unrestricted");
         assert.equal(harness.getOpenedOptions()?.permissionMode, "bypassPermissions");
         assert.equal(harness.getOpenedOptions()?.allowDangerouslySkipPermissions, true);
-        // Forwarded asks (including ask rules and settings fallback) still need a decision
-        // before queued init/status frames arrive.
+        // Fork: forwarded asks in bypass are allowed without a card, even before queued
+        // init/status frames arrive.
         for (const { phase, frame } of [
           {
             phase: "init",
@@ -5480,16 +5513,11 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           );
           assert.equal(
             forwardedFirst.type,
-            "request",
-            `CLI-forwarded Bash must ask before the queued ${phase} frame reaches the adapter`,
+            "decision",
+            `CLI-forwarded Bash must not ask in bypass before the queued ${phase} frame`,
           );
-          if (forwardedFirst.type !== "request") return;
-          assert.equal(forwardedFirst.event.runtimeRequest.kind, "command");
-          yield* harness.runtime.respondToRuntimeRequest({
-            requestId: forwardedFirst.event.runtimeRequest.id,
-            decision: "decline",
-          });
-          assert.equal((yield* Fiber.join(forwardedDecision))?.behavior, "deny");
+          if (forwardedFirst.type !== "decision") return;
+          assert.equal(forwardedFirst.result?.behavior, "allow");
           yield* harness.offerAndWait(frame);
         }
         const fallbackDecision = yield* Effect.promise(() =>
@@ -6800,12 +6828,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           },
         ),
       ).pipe(Effect.forkScoped);
-      const request = yield* Queue.take(harness.runtimeRequestReceipts);
-      yield* harness.runtime.respondToRuntimeRequest({
-        requestId: request.runtimeRequest.id,
-        decision: "accept",
-      });
-      yield* Fiber.join(permission);
+      assert.equal((yield* Fiber.join(permission))?.behavior, "allow");
       yield* harness.offerAndWait(
         claudeSdkFrame({
           type: "assistant",
