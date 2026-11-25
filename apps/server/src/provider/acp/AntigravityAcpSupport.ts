@@ -208,22 +208,73 @@ function isAntigravityT3McpRequest(request: EffectAcpSchema.RequestPermissionReq
   return tool !== undefined && T3_MCP_TOOL_NAMES.has(tool);
 }
 
+// Fork: forge writes publish under the user's identity, so they are denied in every mode. Titles
+// that name no server (agy before 1.5.8) are matched too.
+const ANTIGRAVITY_DENIED_FORGE_TOOLS: ReadonlySet<string> = new Set([
+  "ci_rerun",
+  "comment_on_issue",
+  "create_issue",
+  "set_issue_state",
+  "pull_request_create",
+  "pull_request_merge",
+  "pull_request_respond",
+  "pull_request_review",
+  "pull_request_update",
+]);
+const ANTIGRAVITY_MCP_TOOL_TITLE =
+  /^(?:Run mcp_t3-code_|Running |MCP Tool )(?<tool>[A-Za-z0-9_]+)\??$/;
+
+function antigravityRequestNamesDeniedForgeTool(
+  request: EffectAcpSchema.RequestPermissionRequest,
+): boolean {
+  const rawInput = unknownRecord(request.toolCall.rawInput);
+  if (typeof rawInput?.CommandLine === "string") return false;
+  const tool =
+    rawInput?.ServerName === undefined || rawInput.ServerName === "t3-code"
+      ? typeof rawInput?.ToolName === "string"
+        ? rawInput.ToolName
+        : ANTIGRAVITY_MCP_TOOL_TITLE.exec(request.toolCall.title?.trim() ?? "")?.groups?.tool
+      : undefined;
+  return tool !== undefined && ANTIGRAVITY_DENIED_FORGE_TOOLS.has(tool);
+}
+
+// Fork: agy sends no removal-safety signal, so Auto denies any command that runs rm, rmdir,
+// unlink or find -delete, mirroring Claude's removal deny.
+const ANTIGRAVITY_REMOVAL_COMMAND =
+  /(?:^|[\s;&|(`])(?:\S*\/)?(?:rm|rmdir|unlink)(?=$|[\s;&|)`])|(?:^|[\s;&|(`])find\s[^;&|]*\s-delete(?=$|[\s;&|)`])/;
+
+function antigravityRequestRunsRemoval(request: EffectAcpSchema.RequestPermissionRequest): boolean {
+  const commandLine = unknownRecord(request.toolCall.rawInput)?.CommandLine;
+  return (
+    (request.toolCall.kind === "execute" || typeof commandLine === "string") &&
+    ANTIGRAVITY_REMOVAL_COMMAND.test(
+      typeof commandLine === "string" ? commandLine : (request.toolCall.title ?? ""),
+    )
+  );
+}
+
 export function antigravityPermissionDisposition(
   policy: AcpRuntimePolicy,
   request: EffectAcpSchema.RequestPermissionRequest,
 ) {
   const disposition = acpPermissionDisposition(policy, request);
   if (disposition === "deny") return "deny";
+  if (antigravityRequestNamesDeniedForgeTool(request)) return "deny";
+  const noApprovals = policy.approvalPolicy === undefined || policy.approvalPolicy === "never";
+  if (policy.runtimeMode === "auto" && noApprovals && antigravityRequestRunsRemoval(request)) {
+    return "deny";
+  }
   // T3 authorizes its own MCP server, so Auto and Auto-accept edits run it unasked, as Claude does.
   if (
     (policy.runtimeMode === "auto" || policy.runtimeMode === "auto-accept-edits") &&
-    (policy.approvalPolicy === undefined || policy.approvalPolicy === "never") &&
+    noApprovals &&
     isAntigravityT3McpRequest(request)
   ) {
     return "allow";
   }
-  // agy's Auto has already reviewed what it sends; the user decides unless the sandbox forbids it.
-  return policy.runtimeMode === "auto" ? "ask" : disposition;
+  // Fork: agy's Auto has already reviewed what it sends, so Auto answers from the policy (allow
+  // unless the sandbox forbids it), as Claude's Auto does, instead of asking every time.
+  return disposition;
 }
 
 /** The runtime mode an Antigravity session mode grants; the inverse of `antigravityPermissionMode`. */

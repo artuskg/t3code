@@ -101,15 +101,69 @@ describe("Antigravity Auto", () => {
     expect(antigravitySessionMode("auto", modeState)).toBe(expected);
   });
 
-  it.each(["execute", "read"] as const)("asks about the %s requests agy's Auto sends", (kind) => {
+  // Fork: Auto never asks; removals are denied in Auto, forge writes in every mode.
+  it.each([
+    { kind: "execute", title: "Tool call", rawInput: undefined, auto: "allow", full: "allow" },
+    { kind: "read", title: "Tool call", rawInput: undefined, auto: "allow", full: "allow" },
+    {
+      kind: "execute",
+      title: "Run docker run --rm alpine true",
+      rawInput: { CommandLine: "docker run --rm alpine true" },
+      auto: "allow",
+      full: "allow",
+    },
+    ...[
+      "rm -rf build",
+      "cd /tmp && /bin/rm x",
+      "rmdir out",
+      "xargs unlink < list",
+      "find . -name '*.o' -delete",
+    ].map((CommandLine) => ({
+      kind: "execute" as const,
+      title: `Run ${CommandLine}`,
+      rawInput: { CommandLine },
+      auto: "deny",
+      full: "allow",
+    })),
+    {
+      kind: "execute",
+      title: "MCP Tool pull_request_merge",
+      rawInput: { ServerName: "t3-code", ToolName: "pull_request_merge" },
+      auto: "deny",
+      full: "deny",
+    },
+    {
+      kind: "execute",
+      title: "Running comment_on_issue",
+      rawInput: undefined,
+      auto: "deny",
+      full: "deny",
+    },
+    {
+      kind: "execute",
+      title: "Run mcp_t3-code_pull_request_list",
+      rawInput: undefined,
+      auto: "allow",
+      full: "allow",
+    },
+  ] as const)("answers $title ($kind) with $auto in Auto and $full in Full access", (row) => {
     const request = {
       sessionId: "session-1",
-      toolCall: { toolCallId: "call-1", title: "Tool call", kind },
+      toolCall: { toolCallId: "call-1", title: row.title, kind: row.kind, rawInput: row.rawInput },
       options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
     } satisfies EffectAcpSchema.RequestPermissionRequest;
     expect(antigravityPermissionDisposition({ runtimeMode: "auto", cwd: null }, request)).toBe(
-      "ask",
+      row.auto,
     );
+    expect(
+      antigravityPermissionDisposition({ runtimeMode: "full-access", cwd: null }, request),
+    ).toBe(row.full);
+    expect(
+      antigravityPermissionDisposition(
+        { runtimeMode: "auto", cwd: null, approvalPolicy: "on-request" },
+        request,
+      ),
+    ).toBe(row.full === "deny" ? "deny" : row.kind === "read" ? "allow" : "ask");
   });
 
   it.each([{ type: "readOnly" }, { type: "workspaceWrite", writableRoots: [] }])(
@@ -178,7 +232,10 @@ describe("Antigravity Auto", () => {
         // call_mcp_tool is titled for the tool it calls.
         request("MCP Tool create_issue", { ServerName: "t3-code", ToolName: "delegate_task" }),
       ]) {
-        expect(antigravityPermissionDisposition(policy, otherCall)).toBe("ask");
+        // Fork: Auto answers from the policy; Auto-accept edits still asks about non-edits.
+        expect(antigravityPermissionDisposition(policy, otherCall)).toBe(
+          runtimeMode === "auto" ? "allow" : "ask",
+        );
       }
     },
   );
