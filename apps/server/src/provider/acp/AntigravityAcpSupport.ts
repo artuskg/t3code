@@ -32,6 +32,7 @@ import {
 import type { AcpSessionModeState } from "@t3tools/provider-acp/server/runtimeModel";
 import { T3_MCP_TOOL_NAMES } from "@t3tools/shared/t3McpToolPresentation";
 import packageJson from "../../../package.json" with { type: "json" };
+import { commandRunsRemoval } from "../RemovalCommand.ts";
 import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
 
 export interface AntigravityAcpRuntimeInput extends Omit<
@@ -238,16 +239,13 @@ function antigravityRequestNamesDeniedForgeTool(
   return tool !== undefined && ANTIGRAVITY_DENIED_FORGE_TOOLS.has(tool);
 }
 
-// Fork: agy sends no removal-safety signal, so Auto denies any command that runs rm, rmdir,
-// unlink or find -delete, mirroring Claude's removal deny.
-const ANTIGRAVITY_REMOVAL_COMMAND =
-  /(?:^|[\s;&|(`])(?:\S*\/)?(?:rm|rmdir|unlink)(?=$|[\s;&|)`])|(?:^|[\s;&|(`])find\s[^;&|]*\s-delete(?=$|[\s;&|)`])/;
-
+// Fork: agy sends no removal-safety signal, so Auto and Full access deny any command that runs
+// rm, rmdir, unlink or find -delete, mirroring Claude's removal deny.
 function antigravityRequestRunsRemoval(request: EffectAcpSchema.RequestPermissionRequest): boolean {
   const commandLine = unknownRecord(request.toolCall.rawInput)?.CommandLine;
   return (
     (request.toolCall.kind === "execute" || typeof commandLine === "string") &&
-    ANTIGRAVITY_REMOVAL_COMMAND.test(
+    commandRunsRemoval(
       typeof commandLine === "string" ? commandLine : (request.toolCall.title ?? ""),
     )
   );
@@ -261,7 +259,11 @@ export function antigravityPermissionDisposition(
   if (disposition === "deny") return "deny";
   if (antigravityRequestNamesDeniedForgeTool(request)) return "deny";
   const noApprovals = policy.approvalPolicy === undefined || policy.approvalPolicy === "never";
-  if (policy.runtimeMode === "auto" && noApprovals && antigravityRequestRunsRemoval(request)) {
+  if (
+    (policy.runtimeMode === "auto" || policy.runtimeMode === "full-access") &&
+    noApprovals &&
+    antigravityRequestRunsRemoval(request)
+  ) {
     return "deny";
   }
   // T3 authorizes its own MCP server, so Auto and Auto-accept edits run it unasked, as Claude does.
