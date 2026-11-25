@@ -73,6 +73,7 @@ const removedEnvironmentKeys = new Set([
   "AGY_ACP_ENABLE_OAUTH",
   "GEMINI_HOME",
   "AGY_ACP_FORCE_FILE_STORAGE",
+  "AGY_CLI_FORCE_FILE_TOKEN_STORAGE",
   "AGY_CLI_DISABLE_AUTO_UPDATE",
   "BROWSER",
   "PYTHONUNBUFFERED",
@@ -234,6 +235,8 @@ function antigravityEnvironment(
       : {}),
     GEMINI_HOME: profile.geminiHome,
     AGY_ACP_FORCE_FILE_STORAGE: "1",
+    // agy 1.5.16 dropped the SSH fallback above; this keeps each profile's sign-in in its own file.
+    AGY_CLI_FORCE_FILE_TOKEN_STORAGE: "1",
     // agy's troubleshooting docs specify "true"; the interactive CLI keeps self-updating with "1".
     AGY_CLI_DISABLE_AUTO_UPDATE: "true",
     BROWSER: profile.browserCommand,
