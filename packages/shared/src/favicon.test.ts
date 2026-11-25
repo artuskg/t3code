@@ -3,9 +3,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { faviconUrlForOrigin, toolActivityFaviconUrl } from "./favicon.ts";
 
 describe("faviconUrlForOrigin", () => {
-  it("sends only the public hostname and requested size, never the port", () => {
+  // Fork: no Google favicon lookup, even for a public host.
+  it("never builds a third-party favicon URL", () => {
     expect(faviconUrlForOrigin("https://github.com:8443/pingdotgg/t3code?private=query", 64)).toBe(
-      "https://www.google.com/s2/favicons?domain=github.com&sz=64",
+      null,
     );
   });
 
