@@ -1,10 +1,12 @@
 # Resource telemetry
 
-Process counters come from a [standalone Rust monitor](../../native/resource-monitor/src/main.rs)
-using `sysinfo`. Electron main supplies host power and Electron process metrics.
-Keeping native collection outside Node isolates collector crashes and avoids a
-Node/Electron addon ABI matrix. Desktop and CLI servers use the same child-process
-protocol. A missing or failed collector leaves the server running.
+This build does not ship, build or spawn the native process monitor
+(`native/resource-monitor` stays in the tree only to keep rebases on upstream small).
+[`NativeTelemetryClient.layer`](../../apps/server/src/resourceTelemetry/NativeTelemetryClient.ts)
+reports the collector as unavailable, so diagnostics show no process counters and
+terminal subprocess detection uses its `ps`/PowerShell fallback. Electron main still
+supplies host power and Electron process metrics. The rest of this page describes the
+collector protocol for anyone who restores it.
 
 ## Collection cost
 

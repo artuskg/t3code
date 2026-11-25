@@ -33,10 +33,15 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Ndjson from "effect/encoding/Ndjson";
 
-import { eventVersion as messageVersion } from "./NativeTelemetryClient.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { subscribeBeforeSnapshotWithoutMutex } from "../utils/subscribeBeforeSnapshot.ts";
+
+function messageVersion(value: unknown): number | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const version = Reflect.get(value, "version");
+  return typeof version === "number" ? version : undefined;
+}
 
 const INITIAL_SAMPLE_DEADLINE_MS = 90_000;
 const MIN_SNAPSHOT_STALE_AFTER_MS = 90_000;
