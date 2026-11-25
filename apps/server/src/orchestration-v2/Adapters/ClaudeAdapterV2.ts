@@ -3642,11 +3642,17 @@ function claudeBypassAvailability(
   };
 }
 
-function requiresClaudeApproval(context: ActiveClaudeTurnContext): boolean {
-  // CLI-forwarded requests need a person's decision even under bypass (ask rules,
-  // safety checks, or settings fallback). Do not wait for queued init/status updates.
+function requiresClaudeApproval(
+  context: ActiveClaudeTurnContext,
+  activePermissionMode: PermissionMode,
+): boolean {
+  // Fork: Full access auto-allows CLI-forwarded asks (ask rules, safety checks) like Auto, after
+  // the removal deny. It still asks once the CLI itself has left bypass (settings fallback).
   const policy = context.queryPolicy;
-  return policy.installPermissionCallback || policy.permissionMode === "bypassPermissions";
+  return (
+    policy.installPermissionCallback ||
+    (policy.permissionMode === "bypassPermissions" && activePermissionMode !== "bypassPermissions")
+  );
 }
 
 function claudeRuntimeQueryPolicyKey(policy: ClaudeRuntimeQueryPolicy): string {
@@ -12441,10 +12447,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             });
           }
 
+          const activePermissionMode =
+            (yield* Ref.get(queryContext))?.permissionMode ?? context.queryPolicy.permissionMode;
           if (
             heldForEcho &&
             toolName !== "ExitPlanMode" &&
-            (toolName === "AskUserQuestion" || requiresClaudeApproval(context))
+            (toolName === "AskUserQuestion" ||
+              requiresClaudeApproval(context, activePermissionMode))
           ) {
             // The SDK blocks prompt echoes on permission answers; release held output except for ExitPlanMode.
             yield* releaseHeldRootFrames(context);
@@ -12561,24 +12570,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             } satisfies PermissionResult;
           }
 
-          if (!requiresClaudeApproval(context)) {
-            return {
-              behavior: "allow",
-              updatedInput: toolInput,
-              toolUseID: callbackOptions.toolUseID,
-            } satisfies PermissionResult;
-          }
-
-          const activePermissionMode =
-            (yield* Ref.get(queryContext))?.permissionMode ?? context.queryPolicy.permissionMode;
           const safetyReason = NodeUtil.stripVTControlCharacters(
             callbackOptions.decisionReason ?? "",
           ).trim();
           // The SDK omits the CLI's dangerousRemoval discriminator, so match its removal warnings.
+          // Auto and Full access never show a card, so a removal warning is a hard deny there.
           if (
             toolName === "Bash" &&
-            activePermissionMode === "bypassPermissions" &&
-            callbackOptions.matchedAskRule === undefined &&
+            (activePermissionMode === "bypassPermissions" || activePermissionMode === "auto") &&
             (/^Dangerous rm(?:dir)?\b/i.test(safetyReason) ||
               /\bdangerous removal\b/i.test(safetyReason) ||
               safetyReason === "This shell -c script runs rm and could not be checked" ||
@@ -12587,6 +12586,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return {
               behavior: "deny",
               message: `Claude Code's removal safety check denied this command; the user did not reject it. The command did not run. Do not bypass the check by splitting the removal, putting it in a script, or using another tool or shell. If the warning below supplies a safe rewrite, use it and let the same check evaluate it. Otherwise continue the rest of the task without the removal and tell the user what you needed to delete and why. Warning: ${safetyReason}`,
+              toolUseID: callbackOptions.toolUseID,
+            } satisfies PermissionResult;
+          }
+
+          if (!requiresClaudeApproval(context, activePermissionMode)) {
+            return {
+              behavior: "allow",
+              updatedInput: toolInput,
               toolUseID: callbackOptions.toolUseID,
             } satisfies PermissionResult;
           }
