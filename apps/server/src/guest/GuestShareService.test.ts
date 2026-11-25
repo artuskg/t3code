@@ -132,8 +132,6 @@ const layerAnalytics = Layer.effectContext(
         AnalyticsService.AnalyticsService.of({
           record: (event, properties) =>
             Ref.update(recorded, (events) => [...events, { event, ...properties }]),
-          flush: Effect.void,
-          recordOwners: () => Effect.void,
         }),
       ),
     );
