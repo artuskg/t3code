@@ -1003,4 +1003,14 @@ export const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(AgentAwarenessRelay, make);
+// Fork: the server binds this instead of `Layer.effect(AgentAwarenessRelay, make)`, so agent
+// activity never reaches the relay.
+export const layerDisabled = Layer.succeed(
+  AgentAwarenessRelay,
+  AgentAwarenessRelay.of({
+    publishThread: Effect.fn("AgentAwarenessRelay.publishThread")(function* () {}),
+    drain: Effect.void,
+    requestCatchUp: Effect.fn("AgentAwarenessRelay.requestCatchUp")(function* () {}),
+    start: Effect.fn("AgentAwarenessRelay.start")(function* () {}),
+  }),
+);

@@ -326,8 +326,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
         expect(emptyUrl.capabilities.agentActivityPublishing).toBe(false);
 
         yield* secrets.set(RELAY_URL_SECRET, encode("https://relay.example"));
+        // Fork: publishing is hard-off, so even a linked, opted-in server never advertises it.
         const linked = yield* serverEnvironment.getDescriptor;
-        expect(linked.capabilities.agentActivityPublishing).toBe(true);
+        expect(linked.capabilities.agentActivityPublishing).toBe(false);
 
         yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, encode("false"));
         const disabled = yield* serverEnvironment.getDescriptor;

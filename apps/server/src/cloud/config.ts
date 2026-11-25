@@ -40,6 +40,10 @@ export const decodeConfirmedOrigin = Schema.decodeUnknownOption(
   Schema.fromJsonString(ManagedEndpointConfirmedOrigin),
 );
 
+// Fork: agent activity publishing (thread titles, models and status to the relay) is hard-off,
+// whatever a client or an older build stored.
+export const AGENT_ACTIVITY_PUBLISHING_DISABLED = true;
+
 export function isAgentActivityPublishingEnabledValue(value: string | null): boolean {
   return value === "true";
 }
@@ -52,6 +56,8 @@ export const readAgentActivityPublishingActive: (
   secrets: ServerSecretStore.ServerSecretStore["Service"],
 ) => Effect.Effect<boolean> = Effect.fn("config.readAgentActivityPublishingActive")(
   function* (secrets: ServerSecretStore.ServerSecretStore["Service"]) {
+    // Fork: the server binds AgentAwarenessRelay.layerDisabled, so nothing is ever published.
+    if (AGENT_ACTIVITY_PUBLISHING_DISABLED) return false;
     const readSecretString = (name: string) =>
       secrets
         .get(name)

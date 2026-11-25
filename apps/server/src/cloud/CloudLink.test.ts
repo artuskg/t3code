@@ -255,7 +255,8 @@ it.effect("two overlapping updates are applied one after the other", () => {
         .update({ publishAgentActivity: false, holdWebhooksWhileOffline: false })
         .pipe(Effect.forkChild);
       yield* Effect.yieldNow;
-      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "true");
+      // Fork: publishing is hard-off, so the stored opt-in is always "false".
+      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "false");
       release();
       yield* Fiber.join(first);
       yield* Fiber.join(second);
@@ -287,7 +288,8 @@ it.effect("an update the client walks away from still finishes", () => {
       yield* Effect.yieldNow;
       release();
       yield* Fiber.join(interrupted);
-      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "true");
+      // Fork: publishing is hard-off, so the stored opt-in is always "false".
+      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "false");
       assert.equal(
         new TextDecoder().decode(stored.get(HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET)),
         "true",

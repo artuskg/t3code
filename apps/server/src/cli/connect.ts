@@ -38,6 +38,7 @@ import { filterRelayResponse } from "../cloud/relayResponse.ts";
 import {
   CLOUD_LINK_REVOKED,
   CLOUD_LINKED_USER_ID,
+  AGENT_ACTIVITY_PUBLISHING_DISABLED,
   isAgentActivityPublishingEnabledValue,
   PUBLISH_AGENT_ACTIVITY_SECRET,
   RELAY_URL_SECRET,
@@ -600,7 +601,10 @@ const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(functi
   }
   if (publishOnly) {
     const secrets = yield* ServerSecretStore.ServerSecretStore;
-    yield* secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, stringToBytes("true"));
+    yield* secrets.set(
+      PUBLISH_AGENT_ACTIVITY_SECRET,
+      stringToBytes(String(!AGENT_ACTIVITY_PUBLISHING_DISABLED)),
+    );
   }
   return { identity } as const;
 });
@@ -701,9 +705,13 @@ const connectStatusCommand = Command.make("status", {
           revoked: Option.isSome(cloudUserId) && Option.isSome(revoked),
           cloudUserId: Option.isSome(cloudUserId) ? bytesToString(cloudUserId.value) : null,
           relayUrl: Option.isSome(relayUrl) ? bytesToString(relayUrl.value) : null,
-          publishAgentActivity: isAgentActivityPublishingEnabledValue(
-            Option.isSome(publishAgentActivity) ? bytesToString(publishAgentActivity.value) : null,
-          ),
+          publishAgentActivity:
+            !AGENT_ACTIVITY_PUBLISHING_DISABLED &&
+            isAgentActivityPublishingEnabledValue(
+              Option.isSome(publishAgentActivity)
+                ? bytesToString(publishAgentActivity.value)
+                : null,
+            ),
           relayClient: executable,
           linkMode,
           reachability,
