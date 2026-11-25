@@ -12576,7 +12576,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           // The SDK omits the CLI's dangerousRemoval discriminator, so match its removal warnings.
           // Auto and Full access never show a card, so a removal warning is a hard deny there.
           if (
-            toolName === "Bash" &&
             (activePermissionMode === "bypassPermissions" || activePermissionMode === "auto") &&
             (/^Dangerous rm(?:dir)?\b/i.test(safetyReason) ||
               /\bdangerous removal\b/i.test(safetyReason) ||

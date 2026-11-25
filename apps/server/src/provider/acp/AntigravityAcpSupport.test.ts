@@ -101,16 +101,31 @@ describe("Antigravity Auto", () => {
     expect(antigravitySessionMode("auto", modeState)).toBe(expected);
   });
 
-  // Fork: Auto never asks; removals are denied in Auto, forge writes in every mode.
+  // Fork: Auto never asks; removals are denied in Auto and Full access, forge writes in every mode.
   it.each([
-    { kind: "execute", title: "Tool call", rawInput: undefined, auto: "allow", full: "allow" },
-    { kind: "read", title: "Tool call", rawInput: undefined, auto: "allow", full: "allow" },
+    {
+      kind: "execute",
+      title: "Tool call",
+      rawInput: undefined,
+      auto: "allow",
+      full: "allow",
+      onRequest: "ask",
+    },
+    {
+      kind: "read",
+      title: "Tool call",
+      rawInput: undefined,
+      auto: "allow",
+      full: "allow",
+      onRequest: "allow",
+    },
     {
       kind: "execute",
       title: "Run docker run --rm alpine true",
       rawInput: { CommandLine: "docker run --rm alpine true" },
       auto: "allow",
       full: "allow",
+      onRequest: "ask",
     },
     ...[
       "rm -rf build",
@@ -118,12 +133,20 @@ describe("Antigravity Auto", () => {
       "rmdir out",
       "xargs unlink < list",
       "find . -name '*.o' -delete",
+      `sh -c "rm -rf x"`,
+      "sh -c 'rm -rf x'",
+      "bash -lc 'rm -rf ~/x'",
+      "\\rm -rf x",
+      '"rm" -rf x',
+      "rm$IFS-rf x",
+      "command rm x",
     ].map((CommandLine) => ({
       kind: "execute" as const,
       title: `Run ${CommandLine}`,
       rawInput: { CommandLine },
       auto: "deny",
-      full: "allow",
+      full: "deny",
+      onRequest: "ask",
     })),
     {
       kind: "execute",
@@ -131,6 +154,7 @@ describe("Antigravity Auto", () => {
       rawInput: { ServerName: "t3-code", ToolName: "pull_request_merge" },
       auto: "deny",
       full: "deny",
+      onRequest: "deny",
     },
     {
       kind: "execute",
@@ -138,6 +162,7 @@ describe("Antigravity Auto", () => {
       rawInput: undefined,
       auto: "deny",
       full: "deny",
+      onRequest: "deny",
     },
     {
       kind: "execute",
@@ -145,6 +170,7 @@ describe("Antigravity Auto", () => {
       rawInput: undefined,
       auto: "allow",
       full: "allow",
+      onRequest: "ask",
     },
   ] as const)("answers $title ($kind) with $auto in Auto and $full in Full access", (row) => {
     const request = {
@@ -163,7 +189,7 @@ describe("Antigravity Auto", () => {
         { runtimeMode: "auto", cwd: null, approvalPolicy: "on-request" },
         request,
       ),
-    ).toBe(row.full === "deny" ? "deny" : row.kind === "read" ? "allow" : "ask");
+    ).toBe(row.onRequest);
   });
 
   it.each([{ type: "readOnly" }, { type: "workspaceWrite", writableRoots: [] }])(

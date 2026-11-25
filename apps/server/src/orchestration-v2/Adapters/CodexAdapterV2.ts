@@ -128,6 +128,7 @@ import {
 } from "../../provider/EventNdjsonLogger.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import { codexAppServerArgs, resolveCodexLaunchArgs } from "../../provider/codexLaunchArgs.ts";
+import { commandRunsRemoval } from "../../provider/RemovalCommand.ts";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -5934,8 +5935,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               payload.networkApprovalContext == null &&
               (payload.proposedNetworkPolicyAmendments ?? []).length === 0
             ) {
+              // Fork: a removal is declined at once, as Claude's Full access denies it; Codex tells
+              // the model, so nothing waits on a card.
               return {
-                decision: "accept",
+                decision: commandRunsRemoval(payload.command ?? "") ? "decline" : "accept",
               } satisfies CodexSchema.CommandExecutionRequestApprovalResponse;
             }
             const allowance = sessionAllowance(payload.threadId, context);
