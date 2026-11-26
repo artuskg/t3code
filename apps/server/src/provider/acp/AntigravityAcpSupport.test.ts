@@ -12,6 +12,11 @@ import * as Stream from "effect/Stream";
 import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/compat";
 
+import {
+  parseSessionUpdateEvent,
+  withTrackedPermissionToolCall,
+} from "@t3tools/provider-acp/server/runtimeModel";
+
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import {
   applyAntigravityAcpModelSelection,
@@ -21,6 +26,7 @@ import {
   antigravitySessionMode,
   buildAntigravityPrompt,
 } from "./AntigravityAcpSupport.ts";
+import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
 
 const modelConfig = {
   id: "model",
@@ -200,6 +206,53 @@ describe("Antigravity Auto", () => {
         request,
       ),
     ).toBe(row.onRequest);
+  });
+
+  // Fork: an ID-only request is checked against T3's tracked copy, which keeps only a command's start.
+  const trackedRequest = (rawInput: { CommandLine: string } | undefined, title = "run_command") => {
+    const event = parseSessionUpdateEvent(
+      normalizeAntigravitySessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "call-1",
+          title,
+          kind: "execute",
+          status: "pending",
+          ...(rawInput === undefined ? {} : { rawInput }),
+        },
+      }),
+    ).events[0];
+    if (event?._tag !== "ToolCallUpdated") throw new Error("Expected a tool update.");
+    return withTrackedPermissionToolCall(
+      {
+        sessionId: "session-1",
+        toolCall: { toolCallId: "call-1" },
+        options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+      },
+      event.toolCall,
+    );
+  };
+
+  it.each([
+    ["a removal after the kept start", `echo ${"a".repeat(8_100)}; rm -rf data`],
+    ["a command over the cap", `echo ${"a".repeat(9_000)}`],
+  ])("denies an ID-only request whose tracked command was cut: %s", (_name, CommandLine) => {
+    const request = trackedRequest({ CommandLine });
+    for (const runtimeMode of ["auto", "full-access"] as const) {
+      expect(antigravityPermissionDisposition({ runtimeMode, cwd: null }, request)).toBe("deny");
+    }
+  });
+
+  it("denies an ID-only request whose tracked title was cut, and keeps short ones", () => {
+    const cutTitle = trackedRequest(undefined, `rm -rf data ${"a".repeat(8_100)}`);
+    expect(
+      antigravityPermissionDisposition({ runtimeMode: "full-access", cwd: null }, cutTitle),
+    ).toBe("deny");
+    const short = trackedRequest({ CommandLine: `echo ${"a".repeat(7_900)}` });
+    expect(antigravityPermissionDisposition({ runtimeMode: "full-access", cwd: null }, short)).toBe(
+      "allow",
+    );
   });
 
   it.each([{ type: "readOnly" }, { type: "workspaceWrite", writableRoots: [] }])(

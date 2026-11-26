@@ -59,7 +59,8 @@ you already allowed commands for the session.
 check of the command's text, not a sandbox. It does not catch a removal the shell only assembles
 when the command runs (variables, substitutions, globs, aliases, `eval`), brace-built names such
 as `{r,}m`, interpreter one-liners such as `python -c`, or a script the agent wrote first. A
-command longer than 8 KiB is declined without being checked.
+command longer than 8 KiB is declined without being checked, and so is an Antigravity command
+that T3 has only in shortened form.
 
 Claude can still ask in **Full access** when its settings disable bypass permissions or require
 approval for an action. Dangerous-removal safety checks in bypass mode reject the command with

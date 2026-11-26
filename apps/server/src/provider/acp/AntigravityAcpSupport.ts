@@ -33,7 +33,11 @@ import type { AcpSessionModeState } from "@t3tools/provider-acp/server/runtimeMo
 import { T3_MCP_TOOL_NAMES } from "@t3tools/shared/t3McpToolPresentation";
 import packageJson from "../../../package.json" with { type: "json" };
 import { commandRunsRemoval } from "../RemovalCommand.ts";
-import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
+import {
+  isCutAntigravityCommandLine,
+  isCutAntigravityToolText,
+  normalizeAntigravitySessionUpdate,
+} from "./AntigravityProtocol.ts";
 
 export interface AntigravityAcpRuntimeInput extends Omit<
   AcpSessionRuntime.AcpSessionRuntimeOptions,
@@ -240,14 +244,16 @@ function antigravityRequestNamesDeniedForgeTool(
 }
 
 // Fork: agy sends no removal-safety signal, so Auto and Full access deny any command that runs
-// rm, rmdir, unlink or find -delete, mirroring Claude's removal deny.
+// rm, rmdir, unlink or find -delete, mirroring Claude's removal deny. An ID-only request carries
+// T3's tracked copy, which may be cut; a cut command counts as a removal, as one over the cap does.
 function antigravityRequestRunsRemoval(request: EffectAcpSchema.RequestPermissionRequest): boolean {
   const commandLine = unknownRecord(request.toolCall.rawInput)?.CommandLine;
+  const command = typeof commandLine === "string" ? commandLine : (request.toolCall.title ?? "");
   return (
     (request.toolCall.kind === "execute" || typeof commandLine === "string") &&
-    commandRunsRemoval(
-      typeof commandLine === "string" ? commandLine : (request.toolCall.title ?? ""),
-    )
+    (isCutAntigravityCommandLine(command) ||
+      isCutAntigravityToolText(command) ||
+      commandRunsRemoval(command))
   );
 }
 

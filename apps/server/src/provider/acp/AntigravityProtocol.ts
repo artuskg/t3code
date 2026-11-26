@@ -233,6 +233,9 @@ export { boundText as boundAntigravityToolText };
 /** True when bounding cut some of this text. */
 export const isCutAntigravityToolText = (text: string) => text.includes(TOOL_TEXT_TRUNCATED);
 
+/** True when bounding cut the end off this command line. */
+export const isCutAntigravityCommandLine = (text: string) => text.endsWith(COMMAND_LINE_TRUNCATED);
+
 interface ToolPayloadBudget {
   nodes: number;
   text: number;
