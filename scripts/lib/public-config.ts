@@ -15,7 +15,10 @@ type Environment = Readonly<Record<string, string | undefined>>;
 
 const REPO_ROOT = NodePath.resolve(NodeURL.fileURLToPath(import.meta.url), "../../..");
 
-// Privacy fork: trace endpoints and tokens (relay client, mobile) are never forwarded into builds.
+// Privacy fork: no trace endpoint, dataset or token (server relay client, web, mobile) reaches a
+// build, whether it comes from the environment, .env or .env.local.
+const TRACE_ENV_NAME = /OTLP_TRACES_/;
+
 export function loadRepoEnv({
   baseEnv = process.env,
   repoRoot = REPO_ROOT,
@@ -26,11 +29,14 @@ export function loadRepoEnv({
   const rootEnv = readEnvFile(NodePath.join(repoRoot, ".env"));
   const localEnv = readEnvFile(NodePath.join(repoRoot, ".env.local"));
   const config = resolvePublicConfig(baseEnv, localEnv, rootEnv);
+  const env = Object.fromEntries(
+    Object.entries({ ...rootEnv, ...localEnv, ...baseEnv }).filter(
+      ([name]) => !TRACE_ENV_NAME.test(name),
+    ),
+  );
 
   return {
-    ...rootEnv,
-    ...localEnv,
-    ...baseEnv,
+    ...env,
     ...(config.clerkPublishableKey
       ? {
           T3CODE_CLERK_PUBLISHABLE_KEY: config.clerkPublishableKey,
