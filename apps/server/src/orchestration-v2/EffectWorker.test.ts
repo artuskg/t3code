@@ -234,6 +234,24 @@ it.effect.each([
   }),
 );
 
+// Fork: a purge that a stock build queued settles without removing the thread's history.
+it.effect("settles a queued thread-content purge without purging anything", () =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.now;
+    const events = yield* Ref.make<ReadonlyArray<string>>([]);
+    const layer = layerExecutorFor({ events });
+    yield* Effect.gen(function* () {
+      const executor = yield* EffectWorker.OrchestrationEffectExecutorV2;
+      yield* executor.execute({
+        ...restartEffect(now, { type: "detach" }),
+        id: "effect:thread-content-purge",
+        request: { type: "thread-content.purge" },
+      });
+    }).pipe(Effect.provide(layer));
+    assert.deepEqual(yield* Ref.get(events), []);
+  }),
+);
+
 const lockedIndexMessage =
   "Git's index is locked. Wait for other Git operations to finish, then try again.";
 const rollbackCheckpointId = CheckpointId.make("checkpoint:effect-worker-rollback");

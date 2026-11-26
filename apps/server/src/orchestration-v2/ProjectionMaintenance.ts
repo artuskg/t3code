@@ -24,10 +24,7 @@ export class ProjectionMaintenanceError extends Schema.TaggedError<ProjectionMai
 ) {}
 
 export interface ProjectionMaintenanceV2Shape {
-  /**
-   * Deletes events the projections already cover once they are older than the retained history,
-   * then purges any deleted thread that still holds conversation content.
-   */
+  /** Deletes events the projections already cover once they are older than the retained history. */
   readonly pruneEventStore: (betweenPages?: Effect.Effect<void>) => Effect.Effect<
     {
       readonly deletedEventCount: number;
@@ -39,7 +36,7 @@ export interface ProjectionMaintenanceV2Shape {
   >;
   /**
    * Removes a deleted thread's conversation, and that of deleted run-fork sources it alone kept.
-   * Returns the number of rows removed.
+   * Returns the number of rows removed. Fork: nothing calls this; deleted threads keep history.
    */
   readonly purgeDeletedThread: (
     threadId: ThreadId,
@@ -560,9 +557,8 @@ export const layer: Layer.Layer<ProjectionMaintenanceV2, never, SqlClient.SqlCli
         }
         if (mark === undefined || markIsDue) yield* writeMetadata(EVENT_LOG_PRUNE_MARK, head, now);
 
-        // Catches threads deleted before purging existed, and any purge a crash interrupted.
-        // It runs first so the legacy prune below takes the v1 events of threads it marks.
-        const purgedRowCount = yield* purgeThreads(undefined, betweenPages);
+        // Fork: no deleted-thread sweep. A deleted thread keeps its history, as it did before 0.1.12.
+        const purgedRowCount = 0;
 
         const legacy = yield* pruneImportedLegacyHistory(
           head,

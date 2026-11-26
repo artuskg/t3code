@@ -236,11 +236,6 @@ export const planThreadDeletion = Effect.fn("ThreadDeletion.planThreadDeletion")
       request: { type: "attachment.cleanup", attachmentIds },
     });
   }
-  effects.push({
-    id: `effect:${command.commandId}:thread-content.purge`,
-    commandId: command.commandId,
-    threadId: command.threadId,
-    request: { type: "thread-content.purge" },
-  });
+  // Fork: no thread-content.purge. A deleted thread keeps its history, as it did before 0.1.12.
   return { events, effects };
 });
