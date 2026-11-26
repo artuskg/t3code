@@ -52,6 +52,15 @@ In **Full access**, commands that Codex's dangerous-command check would ask abou
 asking. Codex still asks before network access its managed network settings don't allow, unless
 you already allowed commands for the session.
 
+**This build (privacy fork)** declines removals that Codex in **Full access** and Antigravity in
+**Auto** or **Full access** would otherwise run unasked: a command that runs `rm`, `rmdir`,
+`unlink` or `find … -delete`, including through a path, quotes, escapes, line continuations or a
+`sh -c` script. The agent is told the command was declined and carries on without it. This is a
+check of the command's text, not a sandbox. It does not catch a removal the shell only assembles
+when the command runs (variables, substitutions, globs, aliases, `eval`), brace-built names such
+as `{r,}m`, interpreter one-liners such as `python -c`, or a script the agent wrote first. A
+command longer than 8 KiB is declined without being checked.
+
 Claude can still ask in **Full access** when its settings disable bypass permissions or require
 approval for an action. Dangerous-removal safety checks in bypass mode reject the command with
 the original warning. Claude can use a safe rewrite when the warning supplies one; otherwise it

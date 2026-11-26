@@ -62,4 +62,26 @@ describe("commandRunsRemoval", () => {
       expect(commandRunsRemoval(command)).toBe(false);
     },
   );
+
+  // Fork: the approval path must not stall. The slowest measured input at the cap (8 KiB of =x)
+  // took 69 ms on Tintagel; the bound leaves about 3.5x for a loaded runner.
+  it("checks the slowest known inputs at the cap within 250 ms", () => {
+    for (const unit of ["=x", "(a", "=/"]) {
+      const command = unit.repeat(8_192 / unit.length);
+      // oxlint-disable-next-line t3code/no-wall-clock-in-tests -- the stall bound is the point of this test
+      const started = performance.now();
+      expect(commandRunsRemoval(command)).toBe(false);
+      // oxlint-disable-next-line t3code/no-wall-clock-in-tests -- the stall bound is the point of this test
+      expect(performance.now() - started).toBeLessThan(250);
+    }
+  });
+
+  it("declines a 100 KB adversarial command at once instead of stalling", () => {
+    const command = "=x".repeat(50_000);
+    // oxlint-disable-next-line t3code/no-wall-clock-in-tests -- the stall bound is the point of this test
+    const started = performance.now();
+    expect(commandRunsRemoval(command)).toBe(true);
+    // oxlint-disable-next-line t3code/no-wall-clock-in-tests -- the stall bound is the point of this test
+    expect(performance.now() - started).toBeLessThan(250);
+  });
 });
