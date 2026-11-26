@@ -1,0 +1,310 @@
+// @effect-diagnostics nodeBuiltinImport:off globalTimers:off -- Starts the real CLI as a subprocess under a preload that observes Node's fs, sockets, DNS and fetch, with a plain ready deadline.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeNet from "node:net";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
+
+import { describe, expect, it } from "@effect/vitest";
+
+// Privacy fork guard: with no telemetry configuration, startup sends no product analytics or relay
+// traces and reads no other tool's account files. The analytics code still ships (agent feedback
+// records through it), so this checks behaviour, not bundle strings.
+
+const REPO_ROOT = NodePath.resolve(NodeURL.fileURLToPath(import.meta.url), "../../../..");
+const SERVER_ROOT = NodePath.join(REPO_ROOT, "apps/server");
+// The source entry always runs; the bundle runs when `vp run build:bundle` has produced it.
+const SERVER_ENTRIES = ["src/bin.ts", "dist/bin.mjs"].filter((entry) =>
+  NodeFS.existsSync(NodePath.join(SERVER_ROOT, entry)),
+);
+
+// ingest.t3.codes and every other T3 host except the relay and the hosted app, PostHog, and Axiom.
+const FORBIDDEN_HOST = /(^|\.)(t3\.codes|posthog\.com|axiom\.co)$/i;
+const ALLOWED_T3_HOSTS = new Set(["relay.t3.codes", "app.t3.codes"]);
+// OTLP and PostHog paths on any host, the relay included: relay traces go to an OTLP endpoint.
+const TRACE_OR_ANALYTICS_PATH =
+  /\/v1\/(traces|logs|metrics)\b|\/v1\/mobile\/observe\b|\/(batch|capture|decide|flags)\/?$|\/i\/v0\/e\/?$|\/e\/?$/i;
+
+// Written into the sandbox as CommonJS and loaded with NODE_OPTIONS=--require: unlike --import,
+// --require also runs in every worker thread, and child Node processes inherit it.
+// It records watched-path access and refuses every non-loopback request.
+const SPY_SOURCE = String.raw`
+const cp = require("node:child_process");
+const dns = require("node:dns");
+const fs = require("node:fs");
+const { syncBuiltinESMExports } = require("node:module");
+const net = require("node:net");
+const path = require("node:path");
+const { threadId } = require("node:worker_threads");
+
+const logPath = process.env.T3_EGRESS_SPY_LOG;
+const watched = JSON.parse(process.env.T3_EGRESS_SPY_WATCH);
+const append = fs.appendFileSync;
+const record = (event) =>
+  append(logPath, JSON.stringify({ pid: process.pid, threadId, ...event }) + "\n");
+const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
+record({ kind: "loaded" });
+
+const asPath = (value) => {
+  if (typeof value === "string") return path.resolve(value);
+  if (value instanceof URL && value.protocol === "file:") return value.pathname;
+  if (Buffer.isBuffer(value)) return path.resolve(value.toString());
+  return undefined;
+};
+const wrapPath = (owner, name, kind) => {
+  const original = owner[name];
+  if (typeof original !== "function") return;
+  owner[name] = function (target, ...rest) {
+    const resolved = asPath(target);
+    if (resolved !== undefined && watched.includes(resolved)) record({ kind, fn: name, path: resolved });
+    return original.call(this, target, ...rest);
+  };
+};
+for (const name of ["open", "openSync", "readFile", "readFileSync", "createReadStream", "openAsBlob", "watch", "watchFile"])
+  wrapPath(fs, name, "open");
+for (const name of ["open", "readFile", "watch"]) wrapPath(fs.promises, name, "open");
+for (const name of ["stat", "statSync", "lstat", "lstatSync", "access", "accessSync", "exists", "existsSync"])
+  wrapPath(fs, name, "probe");
+for (const name of ["stat", "lstat", "access"]) wrapPath(fs.promises, name, "probe");
+const binding = process.binding("fs");
+for (const name of ["open", "openFileHandle", "readFileUtf8"]) wrapPath(binding, name, "open");
+
+const connect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function (...args) {
+  const first = Array.isArray(args[0]) ? args[0][0] : args[0];
+  const options =
+    typeof first === "object" && first !== null
+      ? first
+      : typeof first === "number" || /^\d+$/.test(String(first))
+        ? { port: first, host: typeof args[1] === "string" ? args[1] : undefined }
+        : { path: first };
+  if (options.path === undefined) {
+    const host = typeof options.host === "string" ? options.host : "localhost";
+    if (!LOOPBACK.has(host)) {
+      record({ kind: "connect", host, port: options.port });
+      process.nextTick(() => this.destroy(Object.assign(new Error("egress blocked: " + host), { code: "ECONNREFUSED" })));
+      return this;
+    }
+  }
+  return connect.apply(this, args);
+};
+
+const fetch = globalThis.fetch;
+globalThis.fetch = function (input, init) {
+  const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+  if (!LOOPBACK.has(url.hostname.replace(/^\[|\]$/g, ""))) {
+    record({ kind: "fetch", host: url.hostname, path: url.pathname });
+    return Promise.reject(new TypeError("fetch failed: egress blocked"));
+  }
+  return fetch.call(this, input, init);
+};
+
+const failLookup = (owner, name) => {
+  const original = owner[name];
+  if (typeof original !== "function") return;
+  owner[name] = function (host, ...rest) {
+    if (typeof host === "string" && !LOOPBACK.has(host)) {
+      record({ kind: "dns", fn: name, host });
+      const error = Object.assign(new Error("getaddrinfo ENOTFOUND " + host), { code: "ENOTFOUND", hostname: host });
+      if (owner === dns.promises) return Promise.reject(error);
+      const callback = rest.findLast((value) => typeof value === "function");
+      if (callback) process.nextTick(callback, error);
+      return undefined;
+    }
+    return original.call(this, host, ...rest);
+  };
+};
+for (const owner of [dns, dns.promises])
+  for (const name of Object.keys(owner)) if (/^(lookup|resolve)/.test(name)) failLookup(owner, name);
+
+for (const name of ["spawn", "spawnSync", "execFile", "execFileSync", "exec", "execSync", "fork"]) {
+  const original = cp[name];
+  cp[name] = function (file, ...rest) {
+    record({ kind: "spawn", fn: name, file: String(file) });
+    return original.call(this, file, ...rest);
+  };
+}
+syncBuiltinESMExports();
+`;
+
+interface SpyEvent {
+  readonly pid: number;
+  readonly threadId: number;
+  readonly kind: "loaded" | "open" | "probe" | "connect" | "fetch" | "dns" | "spawn";
+  readonly path?: string;
+  readonly host?: string;
+}
+
+const freePort = () =>
+  new Promise<number>((resolve, reject) => {
+    const server = NodeNet.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      server.close(() =>
+        typeof address === "object" && address !== null
+          ? resolve(address.port)
+          : reject(new Error("no port")),
+      );
+    });
+  });
+
+const exited = (child: NodeChildProcess.ChildProcess) =>
+  new Promise<number | null>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) resolve(child.exitCode);
+    else child.once("exit", (code) => resolve(code));
+  });
+
+function makeSandbox() {
+  const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-egress-"));
+  const home = NodePath.join(root, "home");
+  const t3Home = NodePath.join(root, "t3home");
+  NodeFS.mkdirSync(NodePath.join(home, ".codex"), { recursive: true });
+  NodeFS.mkdirSync(NodePath.join(home, ".claude"), { recursive: true });
+  NodeFS.mkdirSync(t3Home);
+  const codexAuth = NodePath.join(home, ".codex", "auth.json");
+  const claudeConfig = NodePath.join(home, ".claude.json");
+  const claudeCredentials = NodePath.join(home, ".claude", ".credentials.json");
+  NodeFS.writeFileSync(codexAuth, JSON.stringify({ tokens: { account_id: "dummy-account" } }));
+  NodeFS.writeFileSync(
+    claudeConfig,
+    JSON.stringify({ oauthAccount: { emailAddress: "dummy@example.invalid" } }),
+  );
+  NodeFS.writeFileSync(
+    claudeCredentials,
+    JSON.stringify({ claudeAiOauth: { accessToken: "dummy-token" } }),
+  );
+  const spyPath = NodePath.join(root, "egress-spy.cjs");
+  NodeFS.writeFileSync(spyPath, SPY_SOURCE);
+  const logPath = NodePath.join(root, "egress.ndjson");
+  NodeFS.writeFileSync(logPath, "");
+  const env = {
+    HOME: home,
+    T3CODE_HOME: t3Home,
+    TMPDIR: root,
+    // No provider CLIs on PATH, so startup cannot hand the dummy credentials to one.
+    PATH: [NodePath.dirname(process.execPath), "/usr/bin", "/bin"].join(NodePath.delimiter),
+    // Source and dev-channel builds then run with no managed policy, so a host policy with
+    // telemetry off cannot hide what the defaults do. Release builds ignore this variable.
+    T3CODE_DEV_MANAGED_POLICY_PATH: NodePath.join(root, "no-policy.json"),
+    NODE_OPTIONS: `--require=${spyPath}`,
+    T3_EGRESS_SPY_LOG: logPath,
+    T3_EGRESS_SPY_WATCH: JSON.stringify([codexAuth, claudeConfig, claudeCredentials]),
+  };
+  const events = (): ReadonlyArray<SpyEvent> =>
+    NodeFS.readFileSync(logPath, "utf8")
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as SpyEvent);
+  return {
+    t3Home,
+    codexAuth,
+    identityFiles: [codexAuth, claudeConfig, claudeCredentials],
+    env,
+    events,
+  };
+}
+
+describe("privacy egress", () => {
+  it.each(SERVER_ENTRIES)(
+    "%s starts without reading other tools' identity files or sending analytics or traces",
+    async (entry) => {
+      const sandbox = makeSandbox();
+
+      // The spy must see the reads and requests it guards against, in the main thread and in a
+      // worker thread, or a clean run proves nothing.
+      const control = NodeChildProcess.spawn(
+        process.execPath,
+        [
+          "-e",
+          [
+            "const { Worker } = require('node:worker_threads');",
+            "const file = process.argv[1];",
+            "new Worker(\"require('node:fs').readFileSync(require('node:worker_threads').workerData)\", { eval: true, workerData: file })",
+            "  .once('exit', () => require('node:fs').promises.readFile(file).then(() => fetch('https://ingest.t3.codes/batch')).catch(() => {}));",
+          ].join("\n"),
+          sandbox.codexAuth,
+        ],
+        { env: sandbox.env, stdio: "ignore" },
+      );
+      expect(await exited(control)).toBe(0);
+      const controlEvents = sandbox.events().filter((event) => event.pid === control.pid);
+      expect(controlEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ threadId: 0, kind: "open", path: sandbox.codexAuth }),
+          expect.objectContaining({ threadId: 0, kind: "fetch", host: "ingest.t3.codes" }),
+        ]),
+      );
+      expect(
+        controlEvents.some(
+          (event) =>
+            event.threadId !== 0 && event.kind === "open" && event.path === sandbox.codexAuth,
+        ),
+      ).toBe(true);
+
+      const port = await freePort();
+      const server = NodeChildProcess.spawn(
+        process.execPath,
+        [
+          entry,
+          "serve",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          String(port),
+          "--base-dir",
+          sandbox.t3Home,
+        ],
+        { cwd: SERVER_ROOT, env: sandbox.env, stdio: ["ignore", "pipe", "pipe"] },
+      );
+      let readyTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        let output = "";
+        await new Promise<void>((resolve, reject) => {
+          // A server that never reports ready must still be stopped by the finally below.
+          // oxlint-disable-next-line t3code/no-real-time-wait-in-tests -- deadline for a real subprocess, not a sleep
+          readyTimer = setTimeout(
+            () => reject(new Error(`server not ready after 60 s:\n${output}`)),
+            60_000,
+          );
+          server.stdout.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+            if (output.includes("T3 Code server is ready.")) resolve();
+          });
+          server.stderr.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+          });
+          server.once("exit", (code) =>
+            reject(new Error(`server exited (${code}) before ready:\n${output}`)),
+          );
+        });
+      } finally {
+        clearTimeout(readyTimer);
+        server.kill("SIGTERM");
+        await exited(server);
+      }
+
+      const serverEvents = sandbox.events().filter((event) => event.pid !== control.pid);
+      // The spy ran inside the server itself, so a clean result means something.
+      expect(serverEvents).toContainEqual(
+        expect.objectContaining({ pid: server.pid, kind: "loaded" }),
+      );
+      const identityAccess = serverEvents.filter(
+        (event) => event.path !== undefined && sandbox.identityFiles.includes(event.path),
+      );
+      expect(identityAccess).toEqual([]);
+
+      const telemetryRequests = serverEvents.filter(
+        (event) =>
+          (event.kind === "fetch" || event.kind === "connect" || event.kind === "dns") &&
+          event.host !== undefined &&
+          ((FORBIDDEN_HOST.test(event.host) && !ALLOWED_T3_HOSTS.has(event.host)) ||
+            (event.kind === "fetch" &&
+              "path" in event &&
+              TRACE_OR_ANALYTICS_PATH.test(String(event.path)))),
+      );
+      expect(telemetryRequests).toEqual([]);
+    },
+  );
+});
