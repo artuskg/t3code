@@ -1,6 +1,12 @@
 # Product usage data
 
-The T3 Code server sends product usage events to T3 Code's own endpoint at `ingest.t3.codes`,
+**This build (privacy fork) sends no product usage events unless you opt in.** It carries no
+analytics key or endpoint of its own, so opting in takes all three of
+`T3CODE_TELEMETRY_ENABLED=true`, `T3CODE_POSTHOG_KEY` and `T3CODE_POSTHOG_HOST` in the server's
+environment. `DO_NOT_TRACK=1` or a managed policy still turns it off. The build also carries no
+relay trace endpoint or token. The rest of this page describes what is sent once you opt in.
+
+Once opted in, the T3 Code server sends product usage events to T3 Code's own endpoint at `ingest.t3.codes`,
 associated with a hashed random identifier for the installation. To count how many installations one person
 uses, the server also sends a hashed identifier for your T3 Connect account when you are signed in
 to one, and a random identifier for each device that connects. The endpoint keeps a copy of each
@@ -78,8 +84,8 @@ when `T3CODE_OTEL_SDK_DISABLED` or `OTEL_SDK_DISABLED` turns OpenTelemetry expor
 
 On a CI runner, the server sends no product events or relay traces by default. It treats a run as
 CI when a common CI variable is set, such as `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, or `JENKINS_URL`.
-`CI=false` and `CI=0` do not count. To send them from CI anyway, set
-`T3CODE_TELEMETRY_ENABLED=true`.
+`CI=false` and `CI=0` do not count. To send product events from CI anyway, opt in as described
+at the top of this page.
 
 An administrator can turn product events and relay tracing off in the server and desktop app with
 a [managed policy](./managed-policy.md#other-capabilities). This does not control traces sent by
