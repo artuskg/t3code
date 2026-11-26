@@ -140,6 +140,13 @@ describe("Antigravity Auto", () => {
       '"rm" -rf x',
       "rm$IFS-rf x",
       "command rm x",
+      'r""m -rf data',
+      "r\\m -rf data",
+      "r''m -rf data",
+      "'r'm -rf data",
+      "$'\\x72m' -rf data",
+      "$'\\162\\155' -rf data",
+      "find . -name '*.o' -de''lete",
     ].map((CommandLine) => ({
       kind: "execute" as const,
       title: `Run ${CommandLine}`,

@@ -2020,6 +2020,20 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       decision: "decline",
     },
     {
+      name: "quoted removal",
+      command: 'r""m -rf ./node_modules',
+      networkApprovalContext: undefined,
+      asks: false,
+      decision: "decline",
+    },
+    {
+      name: "escaped removal",
+      command: "/bin/bash -lc 'r\\m -rf ./node_modules'",
+      networkApprovalContext: undefined,
+      asks: false,
+      decision: "decline",
+    },
+    {
       name: "dangerous command",
       command: "/bin/bash -lc 'git reset --hard'",
       networkApprovalContext: undefined,
