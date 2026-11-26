@@ -117,7 +117,11 @@ const recordTwentyEvents = Effect.gen(function* () {
 const analyticsLayerWith = (
   client: HttpClient.HttpClient,
   policy?: ManagedPolicyDocument,
-  telemetryEnv: { readonly T3CODE_TELEMETRY_ENABLED?: boolean } = {
+  telemetryEnv: {
+    readonly T3CODE_TELEMETRY_ENABLED?: boolean | string;
+    readonly T3CODE_POSTHOG_KEY?: string;
+    readonly T3CODE_POSTHOG_HOST?: string;
+  } = {
     T3CODE_TELEMETRY_ENABLED: true,
   },
 ) =>
@@ -128,9 +132,9 @@ const analyticsLayerWith = (
     Layer.provide(
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          ...telemetryEnv,
           T3CODE_POSTHOG_KEY: "phc_test_key",
           T3CODE_POSTHOG_HOST: "http://localhost",
+          ...telemetryEnv,
         }),
       ),
     ),
@@ -332,6 +336,58 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("AnalyticsService
         );
       assert.deepEqual(yield* onCi({}), []);
       assert.equal((yield* onCi({ T3CODE_TELEMETRY_ENABLED: true })).length, 1);
+    }),
+  );
+
+  // Fork: off unless explicitly enabled, and never without a configured key and host.
+  it.effect("sends nothing unless enabled and given a key and host", () =>
+    Effect.gen(function* () {
+      const run = (telemetryEnv: Parameters<typeof analyticsLayerWith>[2]) =>
+        sendFor(1, respondWithStatus(204), recordTwentyEvents, undefined, telemetryEnv);
+      assert.deepEqual(yield* run({}), []);
+      assert.deepEqual(yield* run({ T3CODE_TELEMETRY_ENABLED: "" }), []);
+      assert.deepEqual(yield* run({ T3CODE_TELEMETRY_ENABLED: "maybe" }), []);
+      assert.deepEqual(yield* run({ T3CODE_TELEMETRY_ENABLED: false }), []);
+      assert.deepEqual(yield* run({ T3CODE_TELEMETRY_ENABLED: true, T3CODE_POSTHOG_KEY: "" }), []);
+      assert.deepEqual(
+        yield* run({ T3CODE_TELEMETRY_ENABLED: true, T3CODE_POSTHOG_HOST: " " }),
+        [],
+      );
+      assert.equal((yield* run({ T3CODE_TELEMETRY_ENABLED: true })).length, 1);
+    }),
+  );
+
+  it.effect("carries no bundled key or host", () =>
+    Effect.gen(function* () {
+      const sent: Array<string> = [];
+      const client = HttpClient.make((request) => {
+        sent.push(request.url);
+        return respondWithStatus(204)(request);
+      });
+      const layer = AnalyticsService.layer.pipe(
+        Layer.provideMerge(
+          ServerConfig.ServerConfig.layerTest(process.cwd(), { prefix: "t3-telemetry-nokey-" }),
+        ),
+        Layer.provide(
+          ConfigProvider.layer(ConfigProvider.fromUnknown({ T3CODE_TELEMETRY_ENABLED: true })),
+        ),
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(HostProcess.Platform, "darwin"),
+            Layer.succeed(HostProcess.Architecture, "arm64"),
+            Layer.succeed(HttpClient.HttpClient, client),
+            ManagedPolicy.layerTest(),
+          ),
+        ),
+      );
+      const queued = yield* Effect.gen(function* () {
+        const analytics = yield* AnalyticsService.AnalyticsService;
+        const accepted = yield* analytics.record("test.no-key");
+        yield* analytics.flush;
+        return accepted;
+      }).pipe(Effect.provide(layer));
+      assert.isFalse(queued);
+      assert.deepEqual(sent, []);
     }),
   );
 

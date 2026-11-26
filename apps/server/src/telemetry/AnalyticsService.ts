@@ -1,6 +1,6 @@
 // T3 ingest retains events and forwards to PostHog; UUIDs deduplicate retries there.
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { isCiEnvironment, isDoNotTrackSet } from "@t3tools/shared/otelEnvironment";
+import { isDoNotTrackSet } from "@t3tools/shared/otelEnvironment";
 import type { ClientOs } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
@@ -67,14 +67,16 @@ function retryDelayMs(failures: number, random: number): number {
   return Math.round(ceiling / 2 + (ceiling / 2) * random);
 }
 
+// Fork: no bundled key or host, and analytics stay off unless T3CODE_TELEMETRY_ENABLED is true
+// and both T3CODE_POSTHOG_KEY and T3CODE_POSTHOG_HOST are set. An unset, empty or unreadable
+// switch means off.
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(
-    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
+  posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(Config.withDefault("")),
+  posthogHost: Config.String("T3CODE_POSTHOG_HOST").pipe(Config.withDefault("")),
+  enabled: Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(
+    Config.option,
+    Config.orElse(() => Config.succeed(Option.none())),
   ),
-  posthogHost: Config.String("T3CODE_POSTHOG_HOST").pipe(
-    Config.withDefault("https://ingest.t3.codes"),
-  ),
-  enabled: Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.option),
   flushBatchSize: Config.Number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
   maxBufferedEvents: Config.Number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
     Config.withDefault(1_000),
@@ -127,8 +129,11 @@ export const make = Effect.gen(function* () {
   const telemetryConfig = yield* TelemetryEnvConfig;
   const hostEnvironment = yield* HostProcess.Environment;
   const awaitingShellConsent = hostEnvironment.T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING === "1";
-  const enabledByDefault = !isCiEnvironment(hostEnvironment);
-  const enabledAtStartup = Option.getOrElse(telemetryConfig.enabled, () => enabledByDefault);
+  const enabledByDefault = false;
+  const endpointConfigured =
+    telemetryConfig.posthogKey.trim() !== "" && telemetryConfig.posthogHost.trim() !== "";
+  const enabledAtStartup =
+    endpointConfigured && Option.getOrElse(telemetryConfig.enabled, () => enabledByDefault);
   // A managed policy can switch analytics off over the environment, never on.
   const policyAllows =
     ManagedPolicy.deniedBy(yield* ManagedPolicy.ManagedPolicy, "telemetry") === undefined;
