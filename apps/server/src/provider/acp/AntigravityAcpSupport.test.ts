@@ -147,6 +147,9 @@ describe("Antigravity Auto", () => {
       "$'\\x72m' -rf data",
       "$'\\162\\155' -rf data",
       "find . -name '*.o' -de''lete",
+      "r\\\nm -rf data",
+      "{r,}m -rf data",
+      "RM -rf data",
     ].map((CommandLine) => ({
       kind: "execute" as const,
       title: `Run ${CommandLine}`,
