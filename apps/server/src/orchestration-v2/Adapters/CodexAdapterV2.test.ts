@@ -2034,6 +2034,13 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       decision: "decline",
     },
     {
+      name: "path-qualified find -delete",
+      command: "/usr/bin/find ./node_modules -delete",
+      networkApprovalContext: undefined,
+      asks: false,
+      decision: "decline",
+    },
+    {
       name: "line-continued removal",
       command: "r\\\nm -rf ./node_modules",
       networkApprovalContext: undefined,

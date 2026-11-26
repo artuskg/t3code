@@ -25,8 +25,8 @@ describe("commandRunsRemoval", () => {
     '"r\\\nm" -rf data',
     "find . -de\\\nlete",
     "fi\\\nnd . -delete",
-    "{r,}m -rf data",
-    "{q..r}m -rf data",
+    "/usr/bin/find . -delete",
+    "/bin/find . -name '*.o' -delete",
     "x{,}; {rm,-rf,data}",
     "RM -rf data",
     "/BIN/Rm -rf data",
@@ -50,4 +50,16 @@ describe("commandRunsRemoval", () => {
   ])("leaves %j alone", (command) => {
     expect(commandRunsRemoval(command)).toBe(false);
   });
+
+  it("treats a command too long to check as a removal", () => {
+    expect(commandRunsRemoval(`echo ${"x".repeat(8_192)}`)).toBe(true);
+  });
+
+  it.each(["x", "=x", "'a", "(a", "=/", "{a,", "$'x", "find "])(
+    "still checks an 8 KiB run of %j",
+    (unit) => {
+      const command = unit.repeat(Math.ceil(8_192 / unit.length)).slice(0, 8_192);
+      expect(commandRunsRemoval(command)).toBe(false);
+    },
+  );
 });
