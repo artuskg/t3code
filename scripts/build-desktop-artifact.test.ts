@@ -538,6 +538,13 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       );
       assert.equal(config.appId, "com.artuskg.t3code.privacy");
       assert.equal(config.productName, "T3 Code (Privacy)");
+      // No OS URL scheme (CFBundleURLTypes) or browser document types beside a stock install.
+      const mac = config.mac as { protocols?: unknown; extendInfo: Record<string, unknown> };
+      assert.isUndefined(mac.protocols);
+      assert.notProperty(mac.extendInfo, "CFBundleURLTypes");
+      assert.notProperty(mac.extendInfo, "CFBundleDocumentTypes");
+      const linux = yield* createBuildConfig("linux", "AppImage", "0.1.12-privacy.1", false, false);
+      assert.isUndefined((linux.linux as { protocols?: unknown }).protocols);
     }),
   );
 

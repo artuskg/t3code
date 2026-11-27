@@ -4,6 +4,7 @@ import {
   applyWslEnableSelection,
   isServerNetworkAccessible,
   parseManualDesktopSshTarget,
+  parsePairingUrlFields,
   resolveAccessEnvironmentId,
   resolveCurrentOriginPairingUrl,
   resolveTailscaleServeBaseUrl,
@@ -51,6 +52,26 @@ describe("parseManualDesktopSshTarget", () => {
     expect(() => parseManualDesktopSshTarget({ host: "devbox", username: "", port })).toThrow(
       "SSH port must be between 1 and 65535.",
     );
+  });
+});
+
+describe("parsePairingUrlFields", () => {
+  // The privacy desktop app registers no t3code:// scheme; pairing works by pasting the URL.
+  it("reads host and code from a pasted pairing URL in the desktop renderer", () => {
+    // Electron registers t3code as a standard scheme, so the renderer origin is t3code://app.
+    vi.stubGlobal("window", { location: { origin: "t3code://app" } });
+    try {
+      expect(parsePairingUrlFields("http://100.64.0.2:3773/pair#token=abc")).toEqual({
+        host: "http://100.64.0.2:3773",
+        pairingCode: "abc",
+      });
+      expect(parsePairingUrlFields("  https://host.example.ts.net/pair#token=xyz ")).toEqual({
+        host: "https://host.example.ts.net",
+        pairingCode: "xyz",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
