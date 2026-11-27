@@ -20,27 +20,33 @@ describe("faviconUrlForOrigin", () => {
 });
 
 describe("toolActivityFaviconUrl", () => {
-  it("uses the page origin instead of a third-party favicon service", () => {
-    expect(toolActivityFaviconUrl({ pageUrl: "https://example.com/docs/page?q=1" }, "light")).toBe(
-      "https://example.com/favicon.ico",
-    );
-    expect(toolActivityFaviconUrl({ pageUrl: "http://localhost:5173/app" }, "light")).toBe(
-      "http://localhost:5173/favicon.ico",
-    );
+  it("never fetches a linked origin's favicon or GitHub's asset CDN", () => {
+    for (const appearance of ["light", "dark"] as const) {
+      expect(toolActivityFaviconUrl({ pageUrl: "https://example.com/docs?q=1" }, appearance)).toBe(
+        null,
+      );
+      expect(toolActivityFaviconUrl({ pageUrl: "https://github.com/o/r/pull/1" }, appearance)).toBe(
+        null,
+      );
+    }
   });
 
-  it("accepts provider-supplied image URLs but rejects extension URLs", () => {
+  it("shows only inline provider images, never a remote or extension URL", () => {
+    const inline = "data:image/png;base64,iVBORw0KGgo=";
+    expect(
+      toolActivityFaviconUrl({ pageUrl: "https://example.com", faviconUrl: inline }, "light"),
+    ).toBe(inline);
     expect(
       toolActivityFaviconUrl(
-        { pageUrl: "https://example.com/docs", faviconUrl: "https://example.com/icon.png" },
+        { pageUrl: "https://example.com", faviconUrl: "https://example.com/icon.png" },
         "light",
       ),
-    ).toBe("https://example.com/icon.png");
+    ).toBeNull();
     expect(
       toolActivityFaviconUrl(
-        { pageUrl: "https://example.com/docs", faviconUrl: "chrome-extension://example/_favicon/" },
-        "light",
+        { pageUrl: "https://example.com", faviconUrl: "chrome-extension://example/_favicon/" },
+        "dark",
       ),
-    ).toBe("https://example.com/favicon.ico");
+    ).toBeNull();
   });
 });
