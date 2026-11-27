@@ -761,6 +761,91 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
     }).pipe(Effect.provide(layerTest)),
   );
 
+  // Privacy fork: accepted limit. Without the opt-in neither organization ID is read, so the
+  // one-probe fallback cannot see an account switch and shows the previous account once.
+  it.effect("without the sign-in opt-in, reuses the last account once after any failure", () =>
+    Effect.gen(function* () {
+      if (yield* HostProcess.isWindows) return;
+
+      const fixtures = yield* makeTildeProviderFixtures();
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const accountConfigPath = path.join(fixtures.claudeHomePath, ".claude.json");
+      yield* fs.writeFileString(
+        accountConfigPath,
+        JSON.stringify({ oauthAccount: { organizationUuid: "org-a" } }),
+      );
+      const claudeId = ProviderInstanceId.make("claude_probe_no_sign_in");
+      let failProbe = false;
+      const query = vi.spyOn(ClaudeSdk, "query").mockImplementation(
+        () =>
+          ({
+            initializationResult: () =>
+              failProbe
+                ? Promise.reject(new Error("initialization failed"))
+                : Promise.resolve({
+                    commands: [{ name: "last-good", description: "", argumentHint: "" }],
+                    account: {
+                      email: "account-a@example.com",
+                      subscriptionType: "pro",
+                      tokenSource: "oauth",
+                    },
+                  }),
+            usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => ({
+              rate_limits_available: true,
+              rate_limits: {
+                five_hour: { utilization: 12, resets_at: "2026-07-18T14:39:00Z" },
+              },
+            }),
+          }) as ReturnType<typeof ClaudeSdk.query>,
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(() => query.mockRestore()));
+
+      const { registry } = yield* makeProviderInstanceRegistry<ClaudeDriverEnv>({
+        drivers: [ClaudeDriver],
+        configMap: {
+          [claudeId]: {
+            driver: ProviderDriverKind.make("claudeAgent"),
+            enabled: true,
+            config: makeClaudeConfig({
+              enabled: true,
+              binaryPath: fixtures.claudeBinaryPath,
+              homePath: fixtures.claudeHomePath,
+            }),
+          },
+        },
+      });
+      const claude = yield* registry.getInstance(claudeId);
+      expect(claude).toBeDefined();
+
+      const first = yield* claude!.snapshot.refresh;
+      expect(first).toMatchObject({
+        status: "ready",
+        auth: { status: "authenticated", email: "account-a@example.com" },
+      });
+      expect(first.auth).not.toHaveProperty("workspaceId");
+
+      // The user signs in to another organization and the next probe fails.
+      yield* TestClock.adjust("1 second");
+      yield* fs.writeFileString(
+        accountConfigPath,
+        JSON.stringify({ oauthAccount: { organizationUuid: "org-b" } }),
+      );
+      yield* claude!.invalidateCaches ?? Effect.void;
+      failProbe = true;
+      const switched = yield* claude!.snapshot.refresh;
+      expect(switched).toMatchObject({
+        status: "ready",
+        auth: { status: "authenticated", email: "account-a@example.com" },
+      });
+      expect(switched.auth).not.toHaveProperty("workspaceId");
+
+      // The fallback lasts one probe.
+      const repeated = yield* claude!.snapshot.refresh;
+      expect(repeated).toMatchObject({ status: "warning", auth: { status: "unknown" } });
+    }).pipe(Effect.provide(layerTest)),
+  );
+
   const redeemClaudeReset = (claim: { result: string; usageFailsAfterClaim: boolean }) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

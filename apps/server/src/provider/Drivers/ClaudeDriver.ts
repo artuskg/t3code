@@ -237,7 +237,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
               Effect.flatMap((capabilities) =>
                 capabilities === undefined
                   ? Effect.fail(error)
-                  : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath, processEnv).pipe(
+                  : // Privacy fork: without T3CODE_READ_AGENT_SIGN_INS=1 both organization IDs are
+                    // undefined, so this one probe cannot tell an account switch from a blip and
+                    // may show the previous account. Skipping the fallback would make readiness flap.
+                    ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath, processEnv).pipe(
                       Effect.flatMap((workspaceId) =>
                         workspaceId === capabilities.workspaceId
                           ? Effect.succeed({
