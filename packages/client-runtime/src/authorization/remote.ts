@@ -9,13 +9,10 @@ import {
   type AuthWebSocketTicketUse,
 } from "@t3tools/contracts";
 import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
-import { hashTelemetryId } from "@t3tools/shared/telemetryId";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { environmentEndpointUrl } from "../environment/endpoint.ts";
-import * as ClientCapabilities from "../platform/capabilities.ts";
 import {
   executeEnvironmentHttpRequest,
   makeEnvironmentHttpApiGroupClient,
@@ -49,18 +46,11 @@ export interface ClientOwnerParams {
 }
 
 /**
- * Tells the environment, for analytics, which T3 Connect account and device
- * are connecting, so it can count the environment as theirs.
+ * Privacy fork stopgap: the Connect-account and device hashes served only the environment's
+ * analytics, and every server (fork, stock 0.1.10 and 0.1.11) treats them as optional. Nothing is
+ * read or sent, so no analytics device ID is created either.
  */
-export const readClientOwnerParams = Effect.gen(function* () {
-  const session = yield* Effect.serviceOption(ClientCapabilities.CloudSession);
-  const account = Option.isSome(session) ? yield* session.value.identity : Option.none();
-  const device = yield* (yield* ClientCapabilities.AnalyticsDevice).id;
-  return {
-    ...(Option.isSome(account) ? { connect: hashTelemetryId(account.value.accountId) } : {}),
-    ...(Option.isSome(device) ? { device: hashTelemetryId(device.value) } : {}),
-  } satisfies ClientOwnerParams;
-});
+export const readClientOwnerParams: Effect.Effect<ClientOwnerParams> = Effect.succeed({});
 
 export const appendClientConnectionParams = (
   url: URL,

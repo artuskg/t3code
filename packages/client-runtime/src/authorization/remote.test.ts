@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
@@ -314,8 +315,9 @@ describe("remote environment authorization", () => {
     }),
   );
 
-  it.effect("names the signed-in Connect account and this device by hash only", () =>
+  it.effect("sends no Connect-account or device identifier, even when both are known", () =>
     Effect.gen(function* () {
+      let deviceIdReads = 0;
       const fetch = recordedFetch(
         Response.json({ ticket: "ws-ticket", expiresAt: "2026-05-01T12:05:00.000Z" }),
       );
@@ -335,15 +337,19 @@ describe("remote environment authorization", () => {
             }),
           ),
           Effect.provideService(ClientCapabilities.AnalyticsDevice, {
-            id: Effect.succeedSome("device-1"),
+            id: Effect.sync(() => {
+              deviceIdReads += 1;
+              return Option.some("device-1");
+            }),
           }),
         ),
       );
 
-      expect(url.searchParams.get("clientOwner")).toBe(hashTelemetryId("user_connect"));
-      expect(url.searchParams.get("clientDevice")).toBe(hashTelemetryId("device-1"));
-      expect(url.toString()).not.toContain("user_connect");
-      expect(url.toString()).not.toContain("device-1");
+      expect(url.searchParams.has("clientOwner")).toBe(false);
+      expect(url.searchParams.has("clientDevice")).toBe(false);
+      expect(url.toString()).not.toContain(hashTelemetryId("user_connect"));
+      expect(url.toString()).not.toContain(hashTelemetryId("device-1"));
+      expect(deviceIdReads).toBe(0);
     }),
   );
 });
