@@ -1,6 +1,7 @@
 import {
   type ProviderInstanceConfig,
   ProviderInstanceId,
+  resolveProviderInstanceEnabled,
   USAGE_CONTRACT_VERSION,
   type ServerSettings as ServerSettingsValue,
   type UsageProviderKind,
@@ -368,10 +369,20 @@ export const make = Effect.gen(function* () {
     const entries: Array<
       readonly [ProviderInstanceId, Pick<ProviderInstanceConfig, "config" | "environment">, boolean]
     > = Object.entries(settings.providerInstances)
-      .filter(([, instance]) => instance.driver === driver.driverKind)
+      .filter(
+        ([, instance]) =>
+          instance.driver === driver.driverKind && resolveProviderInstanceEnabled(instance),
+      )
       .map(([id, instance]) => [ProviderInstanceId.make(id), instance, true] as const);
-    // History in the driver's default home stays counted after every instance moves elsewhere; readers dedupe shared directories.
-    entries.push([ProviderInstanceId.make(driver.driverKind), {}, false]);
+    // Privacy fork: an agent that is off is never read, so its default home counts only while the
+    // unconfigured default instance is on.
+    const defaultId = ProviderInstanceId.make(driver.driverKind);
+    if (
+      !Object.hasOwn(settings.providerInstances, defaultId) &&
+      resolveProviderInstanceEnabled({ driver: driver.driverKind })
+    ) {
+      entries.push([defaultId, {}, false]);
+    }
     const decodeConfig = Schema.decodeUnknownOption(driver.configSchema);
     return yield* Effect.forEach(
       entries,

@@ -182,6 +182,39 @@ const makeWithCursor = (read: CursorAccountReader.CursorAccountReader["Service"]
     };
   });
 
+const USAGE_DRIVERS = [
+  "claudeAgent",
+  "codex",
+  "grok",
+  "pi",
+  "opencode",
+  "muse",
+  "antigravity",
+  "cursor",
+] as const;
+
+// The privacy fork reads only agents that are on. These tests were written for every agent's
+// history, so an instance without an explicit `enabled` is turned on, and so is each default.
+const withEveryUsageAgentOn = (
+  settings: Parameters<typeof ServerSettings.layerTest>[0],
+): Parameters<typeof ServerSettings.layerTest>[0] => {
+  const instances = { ...settings?.providerInstances } as Record<
+    string,
+    { readonly driver: ProviderDriverKind; readonly enabled?: boolean }
+  >;
+  for (const [id, instance] of Object.entries(instances)) {
+    if (instance.enabled === undefined) instances[id] = { ...instance, enabled: true };
+  }
+  for (const driver of USAGE_DRIVERS) {
+    if (!Object.hasOwn(instances, driver)) {
+      instances[driver] = { driver: ProviderDriverKind.make(driver), enabled: true };
+    }
+  }
+  return { ...settings, providerInstances: instances } as Parameters<
+    typeof ServerSettings.layerTest
+  >[0];
+};
+
 const layerService = (input: {
   readonly prefix: string;
   readonly home: string;
@@ -196,6 +229,8 @@ const layerService = (input: {
   readonly platform?: NodeJS.Platform;
   readonly hostname?: string;
   readonly secretStore?: Partial<ServerSecretStore.ServerSecretStore["Service"]>;
+  /** False keeps the settings as given, so an agent that is off stays off. */
+  readonly everyAgentOn?: boolean;
 }) =>
   layerCursorUsageAccounts(CursorAccountReader.layer).pipe(
     Layer.provideMerge(AntigravityUsage.layer),
@@ -216,7 +251,11 @@ const layerService = (input: {
     Layer.provideMerge(Layer.succeed(HostProcess.Platform, input.platform ?? "linux")),
     Layer.provideMerge(Layer.succeed(HostProcess.Hostname, input.hostname ?? "usage-test-host")),
     Layer.provideMerge(Layer.succeed(HostProcess.HomeDirectory, input.home)),
-    Layer.provideMerge(ServerSettings.layerTest(input.settings)),
+    Layer.provideMerge(
+      ServerSettings.layerTest(
+        input.everyAgentOn === false ? input.settings : withEveryUsageAgentOn(input.settings),
+      ),
+    ),
     Layer.provideMerge(
       Layer.succeed(
         HttpClient.HttpClient,
@@ -1500,11 +1539,11 @@ describe("UsageService", () => {
                   ...settings.providerInstances,
                   [ProviderInstanceId.make("muse")]: {
                     driver: ProviderDriverKind.make("muse"),
-                    enabled: false,
+                    enabled: true,
                   },
                   [ProviderInstanceId.make("muse-alias")]: {
                     driver: ProviderDriverKind.make("muse"),
-                    enabled: false,
+                    enabled: true,
                   },
                 },
               },
@@ -1567,7 +1606,7 @@ describe("UsageService", () => {
                 ...settings.providerInstances,
                 [ProviderInstanceId.make("muse")]: {
                   driver: ProviderDriverKind.make("muse"),
-                  enabled: false,
+                  enabled: true,
                 },
               },
             },
@@ -2653,47 +2692,44 @@ describe("UsageService", () => {
     }),
   );
 
-  it.effect("reads configured and disabled accounts once across shared and aliased homes", () =>
+  it.effect("never reads the history of an agent that is off or was never turned on", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
-      const codexHome = NodePath.join(home, "codex-account");
-      const alias = NodePath.join(home, "codex-alias");
-      const claudeHome = NodePath.join(home, "claude-account");
-      const grokHome = NodePath.join(home, "grok-account");
+      const disabledClaude = NodePath.join(home, "claude-off");
+      const piSessions = NodePath.join(home, "pi", "sessions", "proj");
+      const grokSession = NodePath.join(home, "grok", "sessions", "session");
       yield* Effect.promise(async () => {
         await NodeFSP.writeFile(transcript, claudeLine(1, 5));
-        await NodeFSP.mkdir(NodePath.join(claudeHome, "projects"), { recursive: true });
+        await NodeFSP.mkdir(NodePath.join(disabledClaude, "projects"), { recursive: true });
         await NodeFSP.writeFile(
-          NodePath.join(claudeHome, "projects", "session.jsonl"),
+          NodePath.join(disabledClaude, "projects", "session.jsonl"),
           claudeLine(2, 7),
         );
-        await NodeFSP.mkdir(NodePath.join(codexHome, "sessions"), { recursive: true });
-        await NodeFSP.symlink(codexHome, alias, "junction");
+        await NodeFSP.mkdir(piSessions, { recursive: true });
         await NodeFSP.writeFile(
-          NodePath.join(codexHome, "sessions", "rollout.jsonl"),
+          NodePath.join(piSessions, "session.jsonl"),
           [
-            { type: "session_meta", payload: { id: "codex-account-session" } },
-            { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
-            ...[11, 12, 11].map((outputTokens) => ({
-              type: "event_msg",
+            { type: "session", id: "pi-session" },
+            {
+              type: "usage",
+              id: "pi-usage",
               timestamp: "2026-08-01T10:00:00Z",
-              payload: {
-                type: "token_count",
-                info: { last_token_usage: { input_tokens: 10, output_tokens: outputTokens } },
-              },
-            })),
+              provider: "openai",
+              model: "model",
+              usage: { input: 3, output: 11 },
+            },
           ]
             .map((line) => encodeUnknownJsonString(line))
             .join("\n") + "\n",
         );
-        await NodeFSP.mkdir(NodePath.join(grokHome, "sessions", "session"), { recursive: true });
+        await NodeFSP.mkdir(grokSession, { recursive: true });
         await NodeFSP.writeFile(
-          NodePath.join(grokHome, "sessions", "session", "updates.jsonl"),
+          NodePath.join(grokSession, "updates.jsonl"),
           encodeUnknownJsonString({
             timestamp: Date.parse("2026-08-01T10:00:00Z") / 1000,
             method: "_x.ai/session/update",
             params: {
-              sessionId: "grok-account-session",
+              sessionId: "grok-session",
               update: {
                 sessionUpdate: "turn_completed",
                 prompt_id: "prompt-1",
@@ -2703,76 +2739,181 @@ describe("UsageService", () => {
           }) + "\n",
         );
       });
-      const service = yield* UsageService.make.pipe(
+      const summary = yield* UsageService.make.pipe(
+        Effect.flatMap((service) => service.readSummary(WINDOW)),
         Effect.provide(
           layerService({
-            prefix: "usage-service-accounts-test",
+            prefix: "usage-service-agents-off-test",
             home,
+            everyAgentOn: false,
             settings: {
               ...settings,
               providerInstances: {
                 ...settings.providerInstances,
-                [ProviderInstanceId.make("claude-work")]: {
+                [ProviderInstanceId.make("claude-off")]: {
                   driver: ProviderDriverKind.make("claudeAgent"),
                   enabled: false,
-                  environment: [{ name: "CLAUDE_CONFIG_DIR", value: claudeHome, sensitive: false }],
+                  config: { homePath: disabledClaude },
                 },
-                [ProviderInstanceId.make("codex-work")]: {
-                  driver: ProviderDriverKind.make("codex"),
-                  config: { shadowHomePath: NodePath.join(home, "work-shadow") },
-                  environment: [{ name: "CODEX_HOME", value: codexHome, sensitive: false }],
-                },
-                [ProviderInstanceId.make("codex-alias")]: {
-                  driver: ProviderDriverKind.make("codex"),
-                  config: { homePath: alias },
-                },
-                [ProviderInstanceId.make("codex-shadow")]: {
-                  driver: ProviderDriverKind.make("codex"),
-                  config: { homePath: codexHome, shadowHomePath: NodePath.join(home, "shadow") },
-                  environment: [
-                    { name: "CODEX_HOME", value: NodePath.join(home, "ignored"), sensitive: false },
-                  ],
-                },
-                [ProviderInstanceId.make("grok-work")]: {
-                  driver: ProviderDriverKind.make("grok"),
-                  config: { customModels: "not-a-list" },
-                  environment: [{ name: "GROK_HOME", value: grokHome, sensitive: false }],
+                [ProviderInstanceId.make("pi")]: {
+                  driver: ProviderDriverKind.make("pi"),
+                  enabled: false,
                 },
               },
             },
           }),
         ),
       );
-      const summary = yield* service.readSummary(WINDOW);
-      assert.strictEqual(totalOutputTokens(summary), 59);
-      yield* Effect.promise(() =>
-        NodeFSP.rename(
-          NodePath.join(codexHome, "sessions", "rollout.jsonl"),
-          NodePath.join(codexHome, "sessions", "moved.jsonl"),
+      // Grok was never turned on, Pi and claude-off are off: only the default Claude is counted.
+      assert.strictEqual(totalOutputTokens(summary), 5);
+      assert.deepStrictEqual(
+        [...new Set(summary.sources.map((source) => source.fingerprint.provider))].toSorted(),
+        ["claude", "codex"],
+      );
+      assert.isFalse(
+        summary.sources.some((source) =>
+          [disabledClaude, NodePath.join(home, "pi"), NodePath.join(home, "grok")].some((root) =>
+            source.fingerprint.resolvedHomePath.startsWith(root),
+          ),
         ),
-      );
-      const moved = yield* service.readSummary(WINDOW);
-      assert.deepStrictEqual(moved.buckets, summary.buckets);
-      yield* Effect.promise(() =>
-        NodeFSP.rm(NodePath.join(codexHome, "sessions"), { recursive: true }),
-      );
-      const removed = yield* service.readSummary(WINDOW);
-      assert.deepStrictEqual(removed.buckets, summary.buckets);
-
-      const sources = summary.sources.filter((source) => source.status === "ok");
-      assert.strictEqual(sources.length, 4);
-      assert.strictEqual(
-        sources.reduce((sum, source) => sum + source.scannedFiles, 0),
-        4,
-      );
-      assert.strictEqual(
-        sources.filter((source) => source.fingerprint.provider === "codex").length,
-        1,
       );
     }),
   );
 
-  it.effect("keeps default-home history after the default account moves to a custom home", () =>
+  it.effect(
+    "reads configured accounts once across shared and aliased homes, never one that is off",
+    () =>
+      Effect.gen(function* () {
+        const { transcript, settings, home } = yield* setup;
+        const codexHome = NodePath.join(home, "codex-account");
+        const alias = NodePath.join(home, "codex-alias");
+        const claudeHome = NodePath.join(home, "claude-account");
+        const grokHome = NodePath.join(home, "grok-account");
+        yield* Effect.promise(async () => {
+          await NodeFSP.writeFile(transcript, claudeLine(1, 5));
+          await NodeFSP.mkdir(NodePath.join(claudeHome, "projects"), { recursive: true });
+          await NodeFSP.writeFile(
+            NodePath.join(claudeHome, "projects", "session.jsonl"),
+            claudeLine(2, 7),
+          );
+          await NodeFSP.mkdir(NodePath.join(codexHome, "sessions"), { recursive: true });
+          await NodeFSP.symlink(codexHome, alias, "junction");
+          await NodeFSP.writeFile(
+            NodePath.join(codexHome, "sessions", "rollout.jsonl"),
+            [
+              { type: "session_meta", payload: { id: "codex-account-session" } },
+              { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
+              ...[11, 12, 11].map((outputTokens) => ({
+                type: "event_msg",
+                timestamp: "2026-08-01T10:00:00Z",
+                payload: {
+                  type: "token_count",
+                  info: { last_token_usage: { input_tokens: 10, output_tokens: outputTokens } },
+                },
+              })),
+            ]
+              .map((line) => encodeUnknownJsonString(line))
+              .join("\n") + "\n",
+          );
+          await NodeFSP.mkdir(NodePath.join(grokHome, "sessions", "session"), { recursive: true });
+          await NodeFSP.writeFile(
+            NodePath.join(grokHome, "sessions", "session", "updates.jsonl"),
+            encodeUnknownJsonString({
+              timestamp: Date.parse("2026-08-01T10:00:00Z") / 1000,
+              method: "_x.ai/session/update",
+              params: {
+                sessionId: "grok-account-session",
+                update: {
+                  sessionUpdate: "turn_completed",
+                  prompt_id: "prompt-1",
+                  usage: { inputTokens: 10, outputTokens: 13 },
+                },
+              },
+            }) + "\n",
+          );
+        });
+        const service = yield* UsageService.make.pipe(
+          Effect.provide(
+            layerService({
+              prefix: "usage-service-accounts-test",
+              home,
+              settings: {
+                ...settings,
+                providerInstances: {
+                  ...settings.providerInstances,
+                  [ProviderInstanceId.make("claude-work")]: {
+                    driver: ProviderDriverKind.make("claudeAgent"),
+                    enabled: false,
+                    environment: [
+                      { name: "CLAUDE_CONFIG_DIR", value: claudeHome, sensitive: false },
+                    ],
+                  },
+                  [ProviderInstanceId.make("codex-work")]: {
+                    driver: ProviderDriverKind.make("codex"),
+                    config: { shadowHomePath: NodePath.join(home, "work-shadow") },
+                    environment: [{ name: "CODEX_HOME", value: codexHome, sensitive: false }],
+                  },
+                  [ProviderInstanceId.make("codex-alias")]: {
+                    driver: ProviderDriverKind.make("codex"),
+                    config: { homePath: alias },
+                  },
+                  [ProviderInstanceId.make("codex-shadow")]: {
+                    driver: ProviderDriverKind.make("codex"),
+                    config: { homePath: codexHome, shadowHomePath: NodePath.join(home, "shadow") },
+                    environment: [
+                      {
+                        name: "CODEX_HOME",
+                        value: NodePath.join(home, "ignored"),
+                        sensitive: false,
+                      },
+                    ],
+                  },
+                  [ProviderInstanceId.make("grok-work")]: {
+                    driver: ProviderDriverKind.make("grok"),
+                    config: { customModels: "not-a-list" },
+                    environment: [{ name: "GROK_HOME", value: grokHome, sensitive: false }],
+                  },
+                },
+              },
+            }),
+          ),
+        );
+        const summary = yield* service.readSummary(WINDOW);
+        // 5 (default Claude) + 34 (Codex, once) + 13 (Grok); the turned-off claude-work's 7 stay unread.
+        assert.strictEqual(totalOutputTokens(summary), 52);
+        assert.isFalse(
+          summary.sources.some((source) =>
+            source.fingerprint.resolvedHomePath.startsWith(claudeHome),
+          ),
+        );
+        yield* Effect.promise(() =>
+          NodeFSP.rename(
+            NodePath.join(codexHome, "sessions", "rollout.jsonl"),
+            NodePath.join(codexHome, "sessions", "moved.jsonl"),
+          ),
+        );
+        const moved = yield* service.readSummary(WINDOW);
+        assert.deepStrictEqual(moved.buckets, summary.buckets);
+        yield* Effect.promise(() =>
+          NodeFSP.rm(NodePath.join(codexHome, "sessions"), { recursive: true }),
+        );
+        const removed = yield* service.readSummary(WINDOW);
+        assert.deepStrictEqual(removed.buckets, summary.buckets);
+
+        const sources = summary.sources.filter((source) => source.status === "ok");
+        assert.strictEqual(sources.length, 3);
+        assert.strictEqual(
+          sources.reduce((sum, source) => sum + source.scannedFiles, 0),
+          3,
+        );
+        assert.strictEqual(
+          sources.filter((source) => source.fingerprint.provider === "codex").length,
+          1,
+        );
+      }),
+  );
+
+  it.effect("leaves the default home unread after the default account moves to a custom home", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
       const defaultHome = NodePath.join(home, "default-claude");
@@ -2796,7 +2937,8 @@ describe("UsageService", () => {
           }),
         ),
       );
-      assert.strictEqual(totalOutputTokens(summary), 12);
+      // Only the account's custom home is read; the earlier default home's 7 stay unread.
+      assert.strictEqual(totalOutputTokens(summary), 5);
     }),
   );
 
