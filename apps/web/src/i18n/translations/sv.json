@@ -12985,8 +12985,6 @@
   "99451a5d2d40440f": "Återkallad av {by}.",
   "3ee30a50b70fffab": "Återkallad av {by}: {reason}",
   "92e129bf413a1220": "återkallad",
-  "ac796f2bbd3c6d13": "Stäng av T3 Connect på den här enheten",
-  "abdf8ff7dfe752ad": "Konfigurera T3 Connect",
   "ca7a5cf993427034": "Den här appen installerar inte uppdateringar. Uppdatera via din egen release-pipeline.",
   "83c823cee2301835": "T3 Code v{version} har släppts uppströms. Vårt integritetsbygge följer via T3 Maintenance.",
   "d388013849068ce4": "Läs in video från {host}",
