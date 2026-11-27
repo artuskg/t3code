@@ -12981,5 +12981,8 @@
   "ac796f2bbd3c6d13": "Desativar o T3 Connect neste dispositivo",
   "abdf8ff7dfe752ad": "Configurar o T3 Connect",
   "ca7a5cf993427034": "Este app não instala atualizações. Atualize pelo seu próprio pipeline de lançamento.",
-  "83c823cee2301835": "O T3 Code v{version} saiu no upstream. Nossa build de privacidade acompanha pelo T3 Maintenance."
+  "83c823cee2301835": "O T3 Code v{version} saiu no upstream. Nossa build de privacidade acompanha pelo T3 Maintenance.",
+  "d388013849068ce4": "Carregar vídeo de {host}",
+  "5c0871bc63e482fe": "Carregar áudio de {host}",
+  "402dbc52161d1b40": "Carregar imagem de {host}"
 }

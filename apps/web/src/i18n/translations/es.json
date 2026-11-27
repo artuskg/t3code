@@ -12976,5 +12976,8 @@
   "ac796f2bbd3c6d13": "Desactivar T3 Connect en este dispositivo",
   "abdf8ff7dfe752ad": "Configurar T3 Connect",
   "ca7a5cf993427034": "Esta app no instala actualizaciones. Actualiza mediante tu propio proceso de publicación.",
-  "83c823cee2301835": "T3 Code v{version} ya está disponible upstream. Nuestra versión privada llega a través de T3 Maintenance."
+  "83c823cee2301835": "T3 Code v{version} ya está disponible upstream. Nuestra versión privada llega a través de T3 Maintenance.",
+  "d388013849068ce4": "Cargar video de {host}",
+  "5c0871bc63e482fe": "Cargar audio de {host}",
+  "402dbc52161d1b40": "Cargar imagen de {host}"
 }

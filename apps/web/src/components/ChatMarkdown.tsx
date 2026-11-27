@@ -216,6 +216,7 @@ import {
   ChatMarkdownImage,
   ChatMarkdownImageFallback,
   ChatMarkdownVideo,
+  ClickToLoadRemoteMedia,
   MarkdownLinkContext,
   markdownImageCopy,
 } from "./chat/ChatMarkdownMedia";
@@ -1679,7 +1680,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       if (imageSource._tag !== "Direct" && !(filePath && threadRef)) {
         return <ChatMarkdownImageFallback alt={altText} copyMarkdown={copyMarkdown} kind="audio" />;
       }
-      return (
+      const audio = (
         <InlineAudioPreview
           key={classifiedSrc}
           name={name}
@@ -1698,6 +1699,17 @@ const CHAT_MARKDOWN_COMPONENTS = {
               ? { src: resolveProtocolRelativeMediaUrl(imageSource.uri) }
               : {})}
         />
+      );
+      return imageSource._tag === "Direct" && !(filePath && threadRef) ? (
+        <ClickToLoadRemoteMedia
+          src={resolveProtocolRelativeMediaUrl(imageSource.uri)}
+          kind="audio"
+          copyMarkdown={copyMarkdown}
+        >
+          {audio}
+        </ClickToLoadRemoteMedia>
+      ) : (
+        audio
       );
     }
     if (shouldRenderMarkdownImageAsFileLink(imageSource, mediaKind)) {
@@ -1753,8 +1765,8 @@ const CHAT_MARKDOWN_COMPONENTS = {
         src: mediaSrc,
         ...(reference ? { reference } : {}),
       };
-      if (kind === "video") {
-        return (
+      const media =
+        kind === "video" ? (
           <ChatMarkdownVideo
             src={mediaSrc}
             alt={altText}
@@ -1763,22 +1775,30 @@ const CHAT_MARKDOWN_COMPONENTS = {
             style={authoredSizeStyle}
             actionsSource={actionsSource}
           />
+        ) : (
+          <ChatMarkdownImage
+            key={mediaSrc}
+            src={mediaSrc}
+            alt={altText}
+            copyMarkdown={copyMarkdown}
+            standalone={standalone}
+            className={className}
+            style={authoredSizeStyle}
+            imageProps={imageProps}
+            actionsSource={actionsSource}
+            originalUrl={originalUrl}
+            onImageExpand={imageExpand}
+          />
         );
-      }
       return (
-        <ChatMarkdownImage
+        <ClickToLoadRemoteMedia
           key={mediaSrc}
           src={mediaSrc}
-          alt={altText}
+          kind={kind}
           copyMarkdown={copyMarkdown}
-          standalone={standalone}
-          className={className}
-          style={authoredSizeStyle}
-          imageProps={imageProps}
-          actionsSource={actionsSource}
-          originalUrl={originalUrl}
-          onImageExpand={imageExpand}
-        />
+        >
+          {media}
+        </ClickToLoadRemoteMedia>
       );
     }
     const hostImageUrl = use(HostImageUrlContext);

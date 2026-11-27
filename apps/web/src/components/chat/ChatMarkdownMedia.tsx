@@ -11,6 +11,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from "react";
 
 import { useAssetUrlRefresh, useAssetUrlState } from "../../assets/assetUrls";
@@ -171,6 +172,60 @@ export function ChatMarkdownImageFallback(props: {
     <MediaActions source={props.actionsSource}>{content}</MediaActions>
   ) : (
     content
+  );
+}
+
+/** The host of an http(s) media URL on another origin than this page; null for inline or local media. */
+export function remoteMediaHost(src: string, pageOrigin?: string): string | null {
+  try {
+    const url = new URL(src);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.origin === pageOrigin ? null : url.host;
+  } catch {
+    return null;
+  }
+}
+
+const loadedRemoteMediaUrls = new Set<string>();
+
+/**
+ * Privacy fork stopgap: remote media in chat loads only after a click, so a message cannot make
+ * the viewer fetch from an arbitrary host. Media the T3 environment serves takes other paths.
+ */
+export function ClickToLoadRemoteMedia(props: {
+  readonly src: string;
+  readonly kind: "image" | "video" | "audio";
+  readonly copyMarkdown?: string | undefined;
+  readonly children: ReactNode;
+}) {
+  const gt = useGT();
+  const host = remoteMediaHost(
+    props.src,
+    typeof window === "undefined" ? undefined : window.location.origin,
+  );
+  const [loaded, setLoaded] = useState(() => host === null || loadedRemoteMediaUrls.has(props.src));
+  if (loaded || host === null) return props.children;
+  const label =
+    props.kind === "video"
+      ? gt("Load video from {host}", { host })
+      : props.kind === "audio"
+        ? gt("Load audio from {host}", { host })
+        : gt("Load image from {host}", { host });
+  return (
+    <button
+      type="button"
+      data-markdown-copy={props.copyMarkdown}
+      className={cn(
+        CHAT_MARKDOWN_MEDIA_LAYOUT_CLASS_NAME,
+        "rounded-md border border-border/40 bg-muted/40 px-2 py-1 text-xs text-muted-foreground hover:bg-muted",
+      )}
+      onClick={() => {
+        loadedRemoteMediaUrls.add(props.src);
+        setLoaded(true);
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

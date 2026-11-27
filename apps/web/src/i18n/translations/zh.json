@@ -12995,5 +12995,8 @@
   "ac796f2bbd3c6d13": "在此设备上关闭 T3 Connect",
   "abdf8ff7dfe752ad": "设置 T3 Connect",
   "ca7a5cf993427034": "此应用不会安装更新。请通过你自己的发布流程更新。",
-  "83c823cee2301835": "T3 Code v{version} 已在上游发布。我们的隐私版本将通过 T3 Maintenance 跟进。"
+  "83c823cee2301835": "T3 Code v{version} 已在上游发布。我们的隐私版本将通过 T3 Maintenance 跟进。",
+  "d388013849068ce4": "从 {host} 加载视频",
+  "5c0871bc63e482fe": "从 {host} 加载音频",
+  "402dbc52161d1b40": "从 {host} 加载图片"
 }
