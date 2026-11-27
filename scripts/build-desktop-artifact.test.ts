@@ -500,6 +500,29 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }),
   );
 
+  it.effect("ships no resource monitor in any desktop package (privacy fork)", () =>
+    Effect.gen(function* () {
+      for (const [platform, target] of [
+        ["mac", "dmg"],
+        ["linux", "AppImage"],
+        ["win", "nsis"],
+      ] as const) {
+        const config = yield* createBuildConfig(
+          platform,
+          target,
+          "0.1.12-privacy.1",
+          false,
+          false,
+          undefined,
+          undefined,
+          true,
+          "arm64",
+        );
+        assert.notMatch(JSON.stringify(config), /resource[-_]?monitor/iu);
+      }
+    }),
+  );
+
   it.effect("omits update feeds for pull request preview builds", () =>
     Effect.gen(function* () {
       const preview = yield* createBuildConfig(
