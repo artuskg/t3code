@@ -7,6 +7,7 @@ import {
   AgentSessionScanError,
   ClaudeSettings,
   CodexSettings,
+  isManagedDriverAllowed,
   ProviderDriverKind,
   ProviderInstanceId,
   resolveProviderInstanceEnabled,
@@ -1882,6 +1883,10 @@ export const make = Effect.gen(function* () {
     let metadataTruncated = false;
 
     for (const source of ["claudeAgent", "codex", "pi"] as const) {
+      // Privacy fork: a driver the managed policy leaves out is never read, like one that is off.
+      if (!isManagedDriverAllowed(serverSettings.managedPolicy, ProviderDriverKind.make(source))) {
+        continue;
+      }
       const instances: Array<{
         readonly instanceId: ProviderInstanceId;
         readonly config: ProviderInstanceConfig;

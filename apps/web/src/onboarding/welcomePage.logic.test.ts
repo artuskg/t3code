@@ -295,6 +295,23 @@ describe("welcomeImportSources", () => {
     ).toEqual(["codex"]);
   });
 
+  it("leaves out an agent the managed policy does not allow, even when it is on", () => {
+    expect(
+      welcomeImportSources(
+        { providerInstances: { [ProviderInstanceId.make("pi_main")]: instance("pi", true) } },
+        {
+          organization: "Example",
+          lockedSettings: [],
+          limits: {
+            providers: {
+              allowedDrivers: [ProviderDriverKind.make("codex"), ProviderDriverKind.make("pi")],
+            },
+          },
+        },
+      ),
+    ).toEqual(["codex", "pi"]);
+  });
+
   it("names every source until the settings are known", () => {
     expect(welcomeImportSources(undefined)).toEqual(["claudeAgent", "codex", "pi"]);
   });

@@ -810,8 +810,9 @@ function ProjectsSection({
 }) {
   const gt = useGT();
   const m = useMessages();
+  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const importSourcesLabel = useImportSourcesLabel(
-    welcomeImportSources(useAtomValue(serverEnvironment.configValueAtom(environmentId))?.settings),
+    welcomeImportSources(serverConfig?.settings, serverConfig?.managedPolicy),
   );
   const [reviewing, setReviewing] = useState(false);
   const {

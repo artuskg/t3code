@@ -1,4 +1,5 @@
 import {
+  isManagedDriverAllowed,
   type ProviderInstanceConfig,
   ProviderInstanceId,
   resolveProviderInstanceEnabled,
@@ -366,6 +367,8 @@ export const make = Effect.gen(function* () {
     driver: ProviderDriver<Config, unknown, unknown>,
     settings: ServerSettingsValue,
   ) {
+    // Privacy fork: a driver the managed policy leaves out is never read, like one that is off.
+    if (!isManagedDriverAllowed(settingsService.managedPolicy, driver.driverKind)) return [];
     const entries: Array<
       readonly [ProviderInstanceId, Pick<ProviderInstanceConfig, "config" | "environment">, boolean]
     > = Object.entries(settings.providerInstances)

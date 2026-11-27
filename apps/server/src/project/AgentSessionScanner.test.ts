@@ -67,6 +67,7 @@ interface ScannerTestInput {
     readonly sources: ReadonlyArray<AgentSessionImportSource>;
   };
   readonly processRunner?: Layer.Layer<ProcessRunner.ProcessRunner>;
+  readonly managedPolicy?: Parameters<typeof ServerSettings.layerTest>[1];
 }
 
 const layerRuntimeRepository = (imported: ScannerTestInput["importedTranscripts"]) =>
@@ -98,33 +99,36 @@ const layerScannerTest = (input: ScannerTestInput) =>
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
-        ServerSettings.layerTest({
-          providerInstances: {
-            [ProviderInstanceId.make("claudeAgent")]: {
-              driver: ProviderDriverKind.make("claudeAgent"),
-              config: { homePath: input.claudeHomePath },
+        ServerSettings.layerTest(
+          {
+            providerInstances: {
+              [ProviderInstanceId.make("claudeAgent")]: {
+                driver: ProviderDriverKind.make("claudeAgent"),
+                config: { homePath: input.claudeHomePath },
+              },
+              [ProviderInstanceId.make("codex")]: {
+                driver: ProviderDriverKind.make("codex"),
+                config: { homePath: input.codexHomePath },
+              },
+              // Keeps the default Pi instance off the developer's real ~/.pi.
+              [ProviderInstanceId.make("pi")]: {
+                driver: ProviderDriverKind.make("pi"),
+                enabled: true,
+                environment: [
+                  {
+                    name: "PI_CODING_AGENT_DIR",
+                    value: input.piAgentDir ?? `${input.claudeHomePath}/pi-agent`,
+                    sensitive: false,
+                  },
+                  { name: "PI_CODING_AGENT_SESSION_DIR", value: "", sensitive: false },
+                ],
+                config: {},
+              },
+              ...input.providerInstances,
             },
-            [ProviderInstanceId.make("codex")]: {
-              driver: ProviderDriverKind.make("codex"),
-              config: { homePath: input.codexHomePath },
-            },
-            // Keeps the default Pi instance off the developer's real ~/.pi.
-            [ProviderInstanceId.make("pi")]: {
-              driver: ProviderDriverKind.make("pi"),
-              enabled: true,
-              environment: [
-                {
-                  name: "PI_CODING_AGENT_DIR",
-                  value: input.piAgentDir ?? `${input.claudeHomePath}/pi-agent`,
-                  sensitive: false,
-                },
-                { name: "PI_CODING_AGENT_SESSION_DIR", value: "", sensitive: false },
-              ],
-              config: {},
-            },
-            ...input.providerInstances,
           },
-        }),
+          input.managedPolicy,
+        ),
         ServerConfig.layerTest(
           input.claudeHomePath,
           input.configBaseDir ?? { prefix: "t3code-scanner-config-" },
@@ -970,6 +974,48 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         });
 
         expect(result.candidates).toEqual([]);
+      }),
+    );
+
+    it.effect("does not scan an agent the managed policy leaves out", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const claudeHomePath = yield* makeTempDir("t3code-claude-home-");
+        const codexHomePath = yield* makeTempDir("t3code-codex-home-");
+        const claudeWorkspace = yield* makeTempDir("t3code-workspace-denied-");
+        const codexWorkspace = yield* makeTempDir("t3code-workspace-allowed-");
+
+        yield* writeTranscript({
+          filePath: path.join(claudeHomePath, "projects", "-slug", "a.jsonl"),
+          contents: claudeSessionLine(claudeWorkspace),
+          mtimeMs: Date.parse("2026-01-01T00:00:00.000Z"),
+        });
+        yield* writeTranscript({
+          filePath: path.join(
+            codexHomePath,
+            "sessions",
+            "2026",
+            "04",
+            "01",
+            "rollout-allowed.jsonl",
+          ),
+          contents: codexRolloutLine(codexWorkspace),
+          mtimeMs: Date.parse("2026-04-01T09:00:00.000Z"),
+        });
+
+        const result = yield* runScan({
+          claudeHomePath,
+          codexHomePath,
+          managedPolicy: {
+            organization: "Example",
+            lockedSettings: [],
+            limits: { providers: { allowedDrivers: [ProviderDriverKind.make("codex")] } },
+          },
+        });
+
+        expect(result.candidates.map((candidate) => [candidate.path, candidate.sources])).toEqual([
+          [codexWorkspace, ["codex"]],
+        ]);
       }),
     );
 

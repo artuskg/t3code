@@ -231,6 +231,7 @@ const layerService = (input: {
   readonly secretStore?: Partial<ServerSecretStore.ServerSecretStore["Service"]>;
   /** False keeps the settings as given, so an agent that is off stays off. */
   readonly everyAgentOn?: boolean;
+  readonly managedPolicy?: Parameters<typeof ServerSettings.layerTest>[1];
 }) =>
   layerCursorUsageAccounts(CursorAccountReader.layer).pipe(
     Layer.provideMerge(AntigravityUsage.layer),
@@ -254,6 +255,7 @@ const layerService = (input: {
     Layer.provideMerge(
       ServerSettings.layerTest(
         input.everyAgentOn === false ? input.settings : withEveryUsageAgentOn(input.settings),
+        input.managedPolicy,
       ),
     ),
     Layer.provideMerge(
@@ -2777,6 +2779,56 @@ describe("UsageService", () => {
           ),
         ),
       );
+    }),
+  );
+
+  it.effect("never reads the history of an agent the managed policy leaves out", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      const piSessions = NodePath.join(home, "pi", "sessions", "proj");
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(transcript, claudeLine(1, 5));
+        await NodeFSP.mkdir(piSessions, { recursive: true });
+        await NodeFSP.writeFile(
+          NodePath.join(piSessions, "session.jsonl"),
+          [
+            { type: "session", id: "pi-session" },
+            {
+              type: "usage",
+              id: "pi-usage",
+              timestamp: "2026-08-01T10:00:00Z",
+              provider: "openai",
+              model: "model",
+              usage: { input: 3, output: 11 },
+            },
+          ]
+            .map((line) => encodeUnknownJsonString(line))
+            .join("\n") + "\n",
+        );
+      });
+      const summary = yield* UsageService.make.pipe(
+        Effect.flatMap((service) => service.readSummary(WINDOW)),
+        Effect.provide(
+          layerService({
+            prefix: "usage-service-policy-test",
+            home,
+            settings,
+            managedPolicy: {
+              organization: "Example",
+              lockedSettings: [],
+              limits: {
+                providers: {
+                  allowedDrivers: [ProviderDriverKind.make("codex"), ProviderDriverKind.make("pi")],
+                },
+              },
+            },
+          }),
+        ),
+      );
+      // Claude is on but not allowed; the allowed Pi is still read.
+      assert.strictEqual(totalOutputTokens(summary), 11);
+      assert.isFalse(summary.sources.some((source) => source.fingerprint.provider === "claude"));
+      assert.isTrue(summary.sources.some((source) => source.fingerprint.provider === "pi"));
     }),
   );
 

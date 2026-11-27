@@ -1,5 +1,6 @@
 import {
   AgentSessionSource,
+  isManagedDriverAllowed,
   isProviderAvailable,
   managedCapabilityDenial,
   type ManagedPolicySummary,
@@ -181,18 +182,23 @@ export function codexCardProvider(input: {
   return open ? provider : null;
 }
 
-/** Agents whose history the project scan reads: those that are on, as the server decides. */
+/**
+ * Agents whose history the project scan reads: those that are on and that the managed policy
+ * allows, as the server decides.
+ */
 export function welcomeImportSources(
   settings: Pick<ServerSettings, "providerInstances"> | null | undefined,
+  managedPolicy?: ManagedPolicySummary | undefined,
 ): ReadonlyArray<AgentSessionSource> {
   if (!settings) return AgentSessionSource.literals;
   const instances = settings.providerInstances;
   return AgentSessionSource.literals.filter(
     (source) =>
-      Object.values(instances).some(
+      isManagedDriverAllowed(managedPolicy, ProviderDriverKind.make(source)) &&
+      (Object.values(instances).some(
         (instance) => instance.driver === source && resolveProviderInstanceEnabled(instance),
       ) ||
-      (!Object.hasOwn(instances, source) &&
-        resolveProviderInstanceEnabled({ driver: ProviderDriverKind.make(source) })),
+        (!Object.hasOwn(instances, source) &&
+          resolveProviderInstanceEnabled({ driver: ProviderDriverKind.make(source) }))),
   );
 }
