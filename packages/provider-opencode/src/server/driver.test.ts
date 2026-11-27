@@ -1193,6 +1193,8 @@ it.layer(layer)("OpenCodeDriver runtime selection", (it) => {
         instanceId: ProviderInstanceId.make("opencode-usage-recovery"),
         displayName: undefined,
         environment: [
+          // Privacy fork: Go limits read OpenCode's key only with this opt-in.
+          { name: "T3CODE_READ_AGENT_SIGN_INS", sensitive: false, value: "1" },
           {
             name: "OPENCODE_AUTH_CONTENT",
             sensitive: true,
@@ -1324,6 +1326,8 @@ it.layer(layer)("OpenCodeDriver runtime selection", (it) => {
         instanceId: ProviderInstanceId.make("opencode-go-key-only"),
         displayName: undefined,
         environment: [
+          // Privacy fork: Go limits read OpenCode's key only with this opt-in.
+          { name: "T3CODE_READ_AGENT_SIGN_INS", sensitive: false, value: "1" },
           {
             name: "OPENCODE_AUTH_CONTENT",
             sensitive: true,
