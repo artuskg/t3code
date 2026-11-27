@@ -523,6 +523,24 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }),
   );
 
+  it.effect("packages the privacy build under its own bundle ID and name", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "zip",
+        "0.1.12-privacy.1",
+        false,
+        false,
+        undefined,
+        undefined,
+        false,
+        "arm64",
+      );
+      assert.equal(config.appId, "com.artuskg.t3code.privacy");
+      assert.equal(config.productName, "T3 Code (Privacy)");
+    }),
+  );
+
   it.effect("omits update feeds for pull request preview builds", () =>
     Effect.gen(function* () {
       const preview = yield* createBuildConfig(
@@ -1563,7 +1581,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     });
 
     assert.deepStrictEqual(configuration, {
-      appId: "com.t3tools.t3code",
+      appId: "com.artuskg.t3code.privacy",
       teamId: "ABC1234567",
       rpDomains: ["example.clerk.accounts.dev"],
       provisioningProfilePath: "/tmp/t3code.provisionprofile",

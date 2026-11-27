@@ -28,6 +28,8 @@ const publicConfigDefine = {
   ),
   // Privacy build: report new upstream releases, never download or install them.
   __T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__: "true",
+  // Privacy build: own name, bundle ID, home and Electron profile beside a stock install.
+  __T3CODE_DESKTOP_PRIVACY_IDENTITY__: "true",
 };
 
 const PAGE_WORLD_MODULE = /[\\/]src[\\/]preview[\\/]PageWorld\.ts$/;
