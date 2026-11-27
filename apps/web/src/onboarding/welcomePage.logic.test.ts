@@ -15,6 +15,7 @@ import {
   codexNeedsSetup,
   groupWelcomeAgents,
   turnedOnInstance,
+  welcomeImportSources,
   welcomeOffersPhone,
 } from "./welcomePage.logic";
 
@@ -261,5 +262,40 @@ describe("welcomeOffersPhone", () => {
     expect(offers({ policy: policy({ connect: false }) })).toBe(false);
     expect(offers({ policy: policy({ clients: ["desktop"] }) })).toBe(false);
     expect(offers({ isPrimary: false })).toBe(false);
+  });
+});
+
+describe("welcomeImportSources", () => {
+  const instance = (driver: string, enabled?: boolean) => ({
+    driver: ProviderDriverKind.make(driver),
+    ...(enabled === undefined ? {} : { enabled }),
+  });
+
+  it("names only the agents the project scan reads", () => {
+    // Pi is off by default and Codex is turned off; a second Claude account is on.
+    expect(
+      welcomeImportSources({
+        providerInstances: {
+          [ProviderInstanceId.make("codex")]: instance("codex", false),
+          [ProviderInstanceId.make("claude_work")]: instance("claudeAgent"),
+        },
+      }),
+    ).toEqual(["claudeAgent"]);
+    expect(
+      welcomeImportSources({
+        providerInstances: { [ProviderInstanceId.make("pi_main")]: instance("pi", true) },
+      }),
+    ).toEqual(["claudeAgent", "codex", "pi"]);
+    expect(
+      welcomeImportSources({
+        providerInstances: {
+          [ProviderInstanceId.make("claudeAgent")]: instance("claudeAgent", false),
+        },
+      }),
+    ).toEqual(["codex"]);
+  });
+
+  it("names every source until the settings are known", () => {
+    expect(welcomeImportSources(undefined)).toEqual(["claudeAgent", "codex", "pi"]);
   });
 });

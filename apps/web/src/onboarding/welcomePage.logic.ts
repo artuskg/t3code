@@ -1,4 +1,5 @@
 import {
+  AgentSessionSource,
   isProviderAvailable,
   managedCapabilityDenial,
   type ManagedPolicySummary,
@@ -6,6 +7,7 @@ import {
   ProviderDriverKind,
   type ProviderInstanceId,
   resolveProjectProviderInstanceEnabled,
+  resolveProviderInstanceEnabled,
   type ServerProvider,
   type ServerSettings,
 } from "@t3tools/contracts";
@@ -177,4 +179,20 @@ export function codexCardProvider(input: {
     codexNeedsSetup(provider, input.settings) ||
     welcomeAgentState(provider, input.settings) === "checking";
   return open ? provider : null;
+}
+
+/** Agents whose history the project scan reads: those that are on, as the server decides. */
+export function welcomeImportSources(
+  settings: Pick<ServerSettings, "providerInstances"> | null | undefined,
+): ReadonlyArray<AgentSessionSource> {
+  if (!settings) return AgentSessionSource.literals;
+  const instances = settings.providerInstances;
+  return AgentSessionSource.literals.filter(
+    (source) =>
+      Object.values(instances).some(
+        (instance) => instance.driver === source && resolveProviderInstanceEnabled(instance),
+      ) ||
+      (!Object.hasOwn(instances, source) &&
+        resolveProviderInstanceEnabled({ driver: ProviderDriverKind.make(source) })),
+  );
 }

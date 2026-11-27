@@ -74,6 +74,7 @@ import {
   isBrokenVersion,
   turnedOnInstance,
   welcomeAgentState,
+  welcomeImportSources,
   welcomeOffersPhone,
 } from "../../onboarding/welcomePage.logic";
 import {
@@ -300,6 +301,7 @@ export function WelcomePage({
               />
               <ProjectsSection
                 scan={scans[0]}
+                environmentId={environmentId}
                 projectImport={projectImport}
                 isImporting={isImporting}
               />
@@ -797,16 +799,20 @@ function AgentLogoStack({
 
 function ProjectsSection({
   scan,
+  environmentId,
   projectImport,
   isImporting,
 }: {
   readonly scan: ReturnType<typeof useProjectScans>[number] | undefined;
+  readonly environmentId: EnvironmentId;
   readonly projectImport: ReturnType<typeof useProjectImport>;
   readonly isImporting: boolean;
 }) {
   const gt = useGT();
   const m = useMessages();
-  const importSourcesLabel = useImportSourcesLabel();
+  const importSourcesLabel = useImportSourcesLabel(
+    welcomeImportSources(useAtomValue(serverEnvironment.configValueAtom(environmentId))?.settings),
+  );
   const [reviewing, setReviewing] = useState(false);
   const {
     canWrite,
@@ -1952,9 +1958,10 @@ const IMPORT_SOURCE_NAMES: Record<AgentSessionSource, string> = {
   codex: "Codex",
   pi: "Pi",
 };
-function useImportSourcesLabel() {
+// Names only the agents the scan reads, so an agent that is off (Pi by default) is not named.
+function useImportSourcesLabel(sources: ReadonlyArray<AgentSessionSource>) {
   return new Intl.ListFormat(useLocale(), { type: "conjunction" }).format(
-    AgentSessionSource.literals.map((source) => IMPORT_SOURCE_NAMES[source]),
+    sources.map((source) => IMPORT_SOURCE_NAMES[source]),
   );
 }
 
