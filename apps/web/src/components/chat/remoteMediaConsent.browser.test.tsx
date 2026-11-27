@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-vi.mock(import("gt-react"), async (importOriginal) => ({
-  ...(await importOriginal()),
+vi.mock("gt-react", async (original) => ({
+  ...(await original<typeof import("gt-react")>()),
   useGT: () => (text: string, vars?: Record<string, string>) =>
     text.replace(/\{(\w+)\}/gu, (_match, name: string) => vars?.[name] ?? ""),
 }));
