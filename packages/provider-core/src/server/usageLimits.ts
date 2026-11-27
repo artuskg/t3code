@@ -11,7 +11,11 @@ const WINDOW_KIND_ORDER: Record<ServerProviderUsageWindow["kind"], number> = {
   other: 3,
 };
 
-/** Privacy fork: T3 opens another tool's sign-in file or key only when this is "1". */
+/**
+ * Privacy fork: T3 opens another tool's sign-in file or key only when this is exactly "1"
+ * (surrounding spaces ignored). "true", "yes", "0" or an empty value leave it off, and an
+ * instance's own value overrides the host's.
+ */
 const AGENT_SIGN_IN_READS_ENV = "T3CODE_READ_AGENT_SIGN_INS";
 
 export const agentSignInReadsAllowed = (environment: NodeJS.ProcessEnv): boolean =>
