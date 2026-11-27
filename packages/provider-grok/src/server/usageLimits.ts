@@ -9,6 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
+  agentSignInReadsAllowed,
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
@@ -162,6 +163,12 @@ export const readGrokAccount = Effect.fn("readGrokAccount")(function* (
   environment: NodeJS.ProcessEnv = process.env,
 ) {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
+  if (!agentSignInReadsAllowed(environment)) {
+    return {
+      email: undefined,
+      usageLimits: makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" }),
+    };
+  }
   const probeFailed = makeUnavailableUsageLimits({
     checkedAt,
     reason: "probeFailed",

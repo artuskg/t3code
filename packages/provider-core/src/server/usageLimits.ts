@@ -11,6 +11,12 @@ const WINDOW_KIND_ORDER: Record<ServerProviderUsageWindow["kind"], number> = {
   other: 3,
 };
 
+/** Privacy fork: T3 opens another tool's sign-in file or key only when this is "1". */
+const AGENT_SIGN_IN_READS_ENV = "T3CODE_READ_AGENT_SIGN_INS";
+
+export const agentSignInReadsAllowed = (environment: NodeJS.ProcessEnv): boolean =>
+  environment[AGENT_SIGN_IN_READS_ENV]?.trim() === "1";
+
 export function clampPercent(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 }

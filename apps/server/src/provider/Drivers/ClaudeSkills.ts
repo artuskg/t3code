@@ -11,6 +11,7 @@ import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
 import { parse as parseYamlDocument } from "yaml";
 
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { agentSignInReadsAllowed } from "@t3tools/provider-core/server/usageLimits";
 
 import { claudeAccountConfigPath, readClaudeOauthAccount } from "../claudeResetCredits.ts";
 
@@ -442,7 +443,10 @@ const resolveSyncedPluginBucket = Effect.fn("resolveSyncedPluginBucket")(functio
   const accountConfigPath = yield* claudeAccountConfigPath(
     config.homePath.trim() || environment.CLAUDE_CONFIG_DIR?.trim() ? configDirPath : undefined,
   );
-  const account = yield* readClaudeOauthAccount(accountConfigPath);
+  // Privacy fork: Claude's sign-in file is opened only with the opt-in; the env IDs still work.
+  const account = agentSignInReadsAllowed(environment)
+    ? yield* readClaudeOauthAccount(accountConfigPath)
+    : undefined;
   const organizationId = environment.CLAUDE_CODE_ORGANIZATION_UUID ?? account?.organizationUuid;
   // A stored claude.ai login names its own account; an injected token uses the env account.
   const environmentAccountId = environment.CLAUDE_CODE_ACCOUNT_UUID;

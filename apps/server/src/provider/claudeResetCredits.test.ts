@@ -10,6 +10,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import * as ClaudeResetCredits from "./claudeResetCredits.ts";
 
+// Privacy fork: these tests read sign-in files, which T3 does only with this opt-in.
+const SIGN_IN_READS = { T3CODE_READ_AGENT_SIGN_INS: "1" };
+
 const NOW = Date.parse("2026-09-22T12:00:00.000Z");
 const grant = (overrides: Record<string, unknown>) => ({
   id: "grant_a",
@@ -149,7 +152,11 @@ effectIt.layer(NodeServices.layer)("readClaudeResetCredits", (it) => {
           ),
         );
       });
-      const credits = yield* ClaudeResetCredits.readClaudeResetCredits(configDir, "2.1.0").pipe(
+      const credits = yield* ClaudeResetCredits.readClaudeResetCredits(
+        configDir,
+        "2.1.0",
+        SIGN_IN_READS,
+      ).pipe(
         Effect.provideService(HostProcess.Platform, "linux"),
         Effect.provideService(HttpClient.HttpClient, client),
       );
@@ -157,14 +164,54 @@ effectIt.layer(NodeServices.layer)("readClaudeResetCredits", (it) => {
     }),
   );
 
+  it.effect("reads no Claude sign-in or organization ID without the opt-in", () =>
+    Effect.gen(function* () {
+      const { configDir, accountConfigPath } = yield* writeLogin;
+      const credits = yield* ClaudeResetCredits.readClaudeResetCredits(configDir, "2.1.0", {}).pipe(
+        Effect.provideService(HostProcess.Platform, "linux"),
+        Effect.provideService(HttpClient.HttpClient, refuseRequests),
+      );
+      const organization = yield* ClaudeResetCredits.readClaudeOrganizationId(
+        accountConfigPath,
+        {},
+      );
+      const allowed = yield* ClaudeResetCredits.readClaudeOrganizationId(
+        accountConfigPath,
+        SIGN_IN_READS,
+      );
+      const claim = yield* ClaudeResetCredits.consumeClaudeResetCredit({
+        configDir,
+        accountConfigPath,
+        version: "2.1.0",
+        grantId: "grant_a",
+        requestId: "r-1",
+        environment: {},
+      }).pipe(
+        Effect.provideService(HostProcess.Platform, "linux"),
+        Effect.provideService(HttpClient.HttpClient, refuseRequests),
+        Effect.result,
+      );
+      expect([credits, organization, allowed]).toEqual([undefined, undefined, "org-1"]);
+      expect(claim).toMatchObject({ _tag: "Failure", failure: { reason: "loginUnreadable" } });
+    }),
+  );
+
   it.effect("reads nothing from keychain logins or failed requests", () =>
     Effect.gen(function* () {
       const { configDir } = yield* writeLogin;
-      const darwin = yield* ClaudeResetCredits.readClaudeResetCredits(configDir, "2.1.0").pipe(
+      const darwin = yield* ClaudeResetCredits.readClaudeResetCredits(
+        configDir,
+        "2.1.0",
+        SIGN_IN_READS,
+      ).pipe(
         Effect.provideService(HostProcess.Platform, "darwin"),
         Effect.provideService(HttpClient.HttpClient, refuseRequests),
       );
-      const limited = yield* ClaudeResetCredits.readClaudeResetCredits(configDir, "2.1.0").pipe(
+      const limited = yield* ClaudeResetCredits.readClaudeResetCredits(
+        configDir,
+        "2.1.0",
+        SIGN_IN_READS,
+      ).pipe(
         Effect.provideService(HostProcess.Platform, "linux"),
         Effect.provideService(HttpClient.HttpClient, respond(429, {})),
       );
@@ -185,6 +232,7 @@ const consume = (client: HttpClient.HttpClient, ids = { grantId: "grant_a", requ
       ...login,
       version: "2.1.0",
       ...ids,
+      environment: SIGN_IN_READS,
     }).pipe(
       Effect.provideService(HostProcess.Platform, "linux"),
       Effect.provideService(HttpClient.HttpClient, client),

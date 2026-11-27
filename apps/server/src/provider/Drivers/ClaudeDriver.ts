@@ -218,7 +218,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       () =>
         probeClaudeCapabilities(effectiveConfig, processEnv, stateDir).pipe(
           Effect.flatMap((capabilities) =>
-            ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
+            ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath, processEnv).pipe(
               Effect.map((workspaceId) => ({
                 _tag: "fresh" as const,
                 capabilities:
@@ -237,7 +237,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
               Effect.flatMap((capabilities) =>
                 capabilities === undefined
                   ? Effect.fail(error)
-                  : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
+                  : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath, processEnv).pipe(
                       Effect.flatMap((workspaceId) =>
                         workspaceId === capabilities.workspaceId
                           ? Effect.succeed({
@@ -285,7 +285,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
               catalog,
               scopedLimitNames,
               (version) =>
-                ClaudeResetCredits.readClaudeResetCredits(configDir, version).pipe(
+                ClaudeResetCredits.readClaudeResetCredits(configDir, version, processEnv).pipe(
                   Effect.provideService(HttpClient.HttpClient, httpClient),
                   Effect.provideService(FileSystem.FileSystem, fileSystem),
                   Effect.provideService(Path.Path, path),
@@ -376,6 +376,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
               version,
               grantId,
               requestId,
+              environment: processEnv,
             }),
           ClaudeResetCredits.isSettledClaudeResetCreditFailure,
         );

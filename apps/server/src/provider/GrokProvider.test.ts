@@ -28,6 +28,9 @@ import {
 import { execScriptSource, writeFakeCli } from "@t3tools/provider-testing/fakeCli";
 import { grokUsageResponseToLimits, readGrokAccount } from "@t3tools/provider-grok/testing";
 
+// Privacy fork: these tests read sign-in files, which T3 does only with this opt-in.
+const SIGN_IN_READS = { T3CODE_READ_AGENT_SIGN_INS: "1" };
+
 const decodeGrokSettings = Schema.decodeSync(GrokSettings);
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 
@@ -620,6 +623,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
         '{"https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828":{"key":"session-token","auth_mode":"oauth"},"https://accounts.x.ai/sign-in":{"key":"legacy-token"}}',
       );
       const { usageLimits: limits } = yield* readGrokAccount({
+        ...SIGN_IN_READS,
         GROK_HOME: directory,
         HOME: "/unrelated-home",
       }).pipe(
@@ -646,6 +650,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
     "uses GROK_AUTH without reading stored credentials and accepts the legacy login scope",
     () =>
       readGrokAccount({
+        ...SIGN_IN_READS,
         GROK_AUTH: '{"https://accounts.x.ai/sign-in":{"key":"legacy-token"}}',
       }).pipe(
         Effect.provideService(
@@ -711,6 +716,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
         },
       ]) {
         const { usageLimits: limits } = yield* readGrokAccount({
+          ...SIGN_IN_READS,
           HOME: "/definitely/not/a/grok-home",
           ...environment,
         }).pipe(
@@ -732,15 +738,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* fs.makeTempDirectoryScoped();
         const client = HttpClient.make(() => Effect.die("must not request without credentials"));
-        const { usageLimits: missing } = yield* readGrokAccount({ HOME: directory }).pipe(
-          Effect.provideService(HttpClient.HttpClient, client),
-        );
+        const { usageLimits: missing } = yield* readGrokAccount({
+          ...SIGN_IN_READS,
+          HOME: directory,
+        }).pipe(Effect.provideService(HttpClient.HttpClient, client));
         expect(missing.unavailable?.reason).toBe("unsupported");
         for (const contents of [
           "private-token-invalid-json",
           '{"https://accounts.x.ai/sign-in":{"key":42}}',
         ]) {
           const { usageLimits: malformed } = yield* readGrokAccount({
+            ...SIGN_IN_READS,
             GROK_HOME: directory,
             GROK_AUTH: contents,
           }).pipe(Effect.provideService(HttpClient.HttpClient, client));
@@ -759,6 +767,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
         Response.json({ config: { creditUsagePercent: "private-value" } }),
       ]) {
         const { email, usageLimits: limits } = yield* readGrokAccount({
+          ...SIGN_IN_READS,
           HOME: "/definitely/not/a/grok-home",
           GROK_AUTH:
             '{"https://accounts.x.ai/sign-in":{"key":"private-token","email":"someone@example.com"}}',
@@ -780,9 +789,27 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
     }),
   );
 
+  it.effect("reads no Grok login without the opt-in", () =>
+    Effect.gen(function* () {
+      const { email, usageLimits: limits } = yield* readGrokAccount({
+        HOME: "/definitely/not/a/grok-home",
+        GROK_AUTH:
+          '{"https://accounts.x.ai/sign-in":{"key":"private-token","email":"someone@example.com"}}',
+      }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.die("unexpected Grok request")),
+        ),
+      );
+      expect(email).toBeUndefined();
+      expect(limits.unavailable?.reason).toBe("unsupported");
+    }),
+  );
+
   it.effect("tells accounts in Legacy (no storage) to switch to Privacy Mode", () =>
     Effect.gen(function* () {
       const { usageLimits: limits } = yield* readGrokAccount({
+        ...SIGN_IN_READS,
         HOME: "/definitely/not/a/grok-home",
         GROK_AUTH: '{"https://accounts.x.ai/sign-in":{"key":"private-token"}}',
       }).pipe(
@@ -844,6 +871,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount 
       ] as const;
       for (const [environment, expected] of cases) {
         const { email, usageLimits } = yield* readGrokAccount({
+          ...SIGN_IN_READS,
           HOME: "/definitely/not/a/grok-home",
           ...environment,
         }).pipe(

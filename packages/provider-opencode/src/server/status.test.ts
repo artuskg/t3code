@@ -41,6 +41,9 @@ import {
   replayOpenCodeServer,
 } from "./probeResponses.fixture.ts";
 import { DEFAULT_VARIANT_CHOICE_ID } from "@t3tools/shared/model";
+
+// Privacy fork: these tests read sign-in files, which T3 does only with this opt-in.
+const SIGN_IN_READS = { T3CODE_READ_AGENT_SIGN_INS: "1" };
 const decodeOpenCodeSettings = Schema.decodeSync(OpenCodeSettings);
 
 const DEFAULT_VERSION_STDOUT = "opencode 1.14.19\n";
@@ -51,7 +54,11 @@ it.effect("reads Go limits with the instance's XDG credentials and preserves res
     const limits = yield* readOpenCodeGoUsageLimits({
       enabled: true,
       serverUrl: "",
-      environment: { XDG_DATA_HOME: "/instance/data", OPENCODE_API_KEY: "env-key" },
+      environment: {
+        ...SIGN_IN_READS,
+        XDG_DATA_HOME: "/instance/data",
+        OPENCODE_API_KEY: "env-key",
+      },
     }).pipe(
       Effect.provideService(
         FileSystem.FileSystem,
@@ -193,6 +200,7 @@ it.effect(
           enabled: true,
           serverUrl: "",
           environment: {
+            ...SIGN_IN_READS,
             XDG_DATA_HOME: dataHome,
             ...(databaseFile !== undefined ? { OPENCODE_DB: databaseFile } : {}),
             ...(inline
@@ -278,7 +286,7 @@ it.effect("prefers the selected stored Go key over the auth.json key OpenCode 2 
       const limits = yield* readOpenCodeGoUsageLimits({
         enabled: true,
         serverUrl: "",
-        environment: { XDG_DATA_HOME: dataHome },
+        environment: { ...SIGN_IN_READS, XDG_DATA_HOME: dataHome },
       }).pipe(
         Effect.provideService(
           HttpClient.HttpClient,
@@ -329,6 +337,33 @@ it.effect("does not read local credentials for external or disabled OpenCode ins
   }),
 );
 
+it.effect("reads no OpenCode Go key without the agent sign-in opt-in", () =>
+  Effect.gen(function* () {
+    const limits = yield* readOpenCodeGoUsageLimits({
+      enabled: true,
+      serverUrl: "",
+      environment: {
+        XDG_DATA_HOME: "/instance/data",
+        OPENCODE_API_KEY: "env-key",
+        OPENCODE_AUTH_CONTENT: '{"opencode-go":{"type":"api","key":"inline-key"}}',
+      },
+    }).pipe(
+      Effect.provideService(
+        FileSystem.FileSystem,
+        FileSystem.makeNoop({
+          readFileString: () => Effect.die("unexpected credential read"),
+        }),
+      ),
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("unexpected usage request")),
+      ),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    );
+    NodeAssert.equal(limits.unavailable?.reason, "unsupported");
+  }),
+);
+
 it.effect("keeps Go entitlement absence distinct from failed or malformed usage responses", () =>
   Effect.gen(function* () {
     for (const [status, reason] of [
@@ -340,6 +375,7 @@ it.effect("keeps Go entitlement absence distinct from failed or malformed usage 
         enabled: true,
         serverUrl: "",
         environment: {
+          ...SIGN_IN_READS,
           OPENCODE_AUTH_CONTENT: '{"opencode-go":{"type":"api","key":"inline-key"}}',
         },
       }).pipe(

@@ -11,6 +11,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import { agentSignInReadsAllowed } from "@t3tools/provider-core/server/usageLimits";
 
 const API_BASE = "https://api.anthropic.com";
 const PROGRAM = "cedar_ember";
@@ -208,7 +209,8 @@ const withClaudeHeaders = (token: string, version: string) =>
   });
 
 export const readClaudeResetCredits = Effect.fn("readClaudeResetCredits")(
-  function* (configDir: string, version: string) {
+  function* (configDir: string, version: string, environment: NodeJS.ProcessEnv) {
+    if (!agentSignInReadsAllowed(environment)) return undefined;
     const token = yield* readAccessToken(configDir);
     if (!token) return undefined;
     const client = yield* HttpClient.HttpClient;
@@ -235,10 +237,15 @@ export const readClaudeOauthAccount = (accountConfigPath: string) =>
     Effect.orElseSucceed(() => undefined),
   );
 
-export const readClaudeOrganizationId = (accountConfigPath: string) =>
-  readClaudeOauthAccount(accountConfigPath).pipe(
-    Effect.map((account) => account?.organizationUuid?.trim() || undefined),
-  );
+export const readClaudeOrganizationId = (
+  accountConfigPath: string,
+  environment: NodeJS.ProcessEnv,
+) =>
+  agentSignInReadsAllowed(environment)
+    ? readClaudeOauthAccount(accountConfigPath).pipe(
+        Effect.map((account) => account?.organizationUuid?.trim() || undefined),
+      )
+    : Effect.succeed(undefined);
 
 export const claudeAccountConfigPath = Effect.fn("claudeAccountConfigPath")(function* (
   configDir: string | undefined,
@@ -263,9 +270,13 @@ export const consumeClaudeResetCredit = Effect.fn("consumeClaudeResetCredit")(fu
   readonly version: string;
   readonly grantId: string;
   readonly requestId: string;
+  readonly environment: NodeJS.ProcessEnv;
 }) {
   if (!GRANT_ID.test(input.grantId) || !REQUEST_ID.test(input.requestId)) {
     return yield* new ClaudeResetCreditError({ reason: "malformedCredit" });
+  }
+  if (!agentSignInReadsAllowed(input.environment)) {
+    return yield* new ClaudeResetCreditError({ reason: "loginUnreadable" });
   }
   const token = yield* readAccessToken(input.configDir).pipe(
     Effect.mapError((cause) => new ClaudeResetCreditError({ reason: "loginUnreadable", cause })),

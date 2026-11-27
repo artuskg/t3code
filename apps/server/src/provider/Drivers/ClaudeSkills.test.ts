@@ -8,6 +8,9 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { discoverClaudeSkills as discoverSkills } from "./ClaudeSkills.ts";
 import { planClaudeSkillDispatch } from "./ClaudeSkillDispatch.ts";
 
+// Privacy fork: these tests read sign-in files, which T3 does only with this opt-in.
+const SIGN_IN_READS = { T3CODE_READ_AGENT_SIGN_INS: "1" };
+
 // Windows makes the managed directory fixture-controlled without reading host policy or skills.
 const discoverClaudeSkills = (
   ...[config, cwd, environment = {}]: Parameters<typeof discoverSkills>
@@ -423,11 +426,16 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
         }),
       );
 
+      // Without the opt-in T3 does not open .claude.json, so the account's bucket stays unknown.
+      assert.isFalse(
+        (yield* discoverClaudeSkills({ homePath: configDir }, undefined, {})).some((skill) =>
+          skill.path.startsWith(synced),
+        ),
+      );
       assert.deepEqual(
-        (yield* discoverClaudeSkills({ homePath: configDir }, undefined, {})).map((skill) => [
-          skill.name,
-          skill.path,
-        ]),
+        (yield* discoverClaudeSkills({ homePath: configDir }, undefined, SIGN_IN_READS)).map(
+          (skill) => [skill.name, skill.path],
+        ),
         [
           [
             "design:design-critique",
@@ -444,12 +452,14 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
       );
       assert.deepEqual(
         (yield* discoverClaudeSkills({ homePath: configDir }, undefined, {
+          ...SIGN_IN_READS,
           CLAUDE_CODE_PLUGIN_CACHE_DIR: path.join(configDir, "relocated-cache"),
         })).map((skill) => skill.name),
         ["design:design-critique", "pstack:poteto-mode"],
       );
       assert.deepEqual(
         (yield* discoverClaudeSkills({ homePath: configDir }, undefined, {
+          ...SIGN_IN_READS,
           CLAUDE_CODE_OAUTH_TOKEN: "token",
           CLAUDE_CODE_ACCOUNT_UUID: "77777777-8888-4999-aaaa-bbbbbbbbbbbb",
         })).map((skill) => skill.name),
@@ -460,7 +470,7 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
         '{"enabledPlugins":{"pstack@synced":false}}',
       );
       assert.deepEqual(
-        (yield* discoverClaudeSkills({ homePath: configDir }, undefined, {})).map(
+        (yield* discoverClaudeSkills({ homePath: configDir }, undefined, SIGN_IN_READS)).map(
           (skill) => skill.name,
         ),
         ["design:design-critique"],
@@ -469,7 +479,10 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
         path.join(configDir, "settings.json"),
         '{"syncClaudeAiPlugins":false}',
       );
-      assert.deepEqual(yield* discoverClaudeSkills({ homePath: configDir }, undefined, {}), []);
+      assert.deepEqual(
+        yield* discoverClaudeSkills({ homePath: configDir }, undefined, SIGN_IN_READS),
+        [],
+      );
     }),
   );
 
@@ -523,6 +536,7 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
             JSON.stringify({ enabledPlugins: { "tools@shop": enabled, "pstack@shop": true } }),
           );
           const skills = yield* discoverClaudeSkills({ homePath: configDir }, undefined, {
+            ...SIGN_IN_READS,
             CLAUDE_CODE_ORGANIZATION_UUID: "11111111-2222-4333-8444-555555555555",
             CLAUDE_CODE_ACCOUNT_UUID: "not-a-uuid",
           });
@@ -542,6 +556,7 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
       yield* writeSkill(path.join(bucket, "no-id", "skills"), "unlisted", "# Synced");
       assert.notInclude(
         (yield* discoverClaudeSkills({ homePath: configDir }, undefined, {
+          ...SIGN_IN_READS,
           CLAUDE_CODE_ORGANIZATION_UUID: "11111111-2222-4333-8444-555555555555",
         })).map((skill) => skill.name),
         "no-id:unlisted",
@@ -1019,6 +1034,7 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
       );
 
       const skills = yield* discoverClaudeSkills({ homePath: "" }, undefined, {
+        ...SIGN_IN_READS,
         CLAUDE_CONFIG_DIR: environmentConfigDir,
       });
 
@@ -1034,6 +1050,7 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
         ["---", "name: explicit-skill", "---"].join("\n"),
       );
       const explicitSkills = yield* discoverClaudeSkills({ homePath: explicitHome }, undefined, {
+        ...SIGN_IN_READS,
         CLAUDE_CONFIG_DIR: environmentConfigDir,
       });
       assert.deepEqual(

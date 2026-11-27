@@ -14,6 +14,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 import {
+  agentSignInReadsAllowed,
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
@@ -91,7 +92,9 @@ export const readOpenCodeGoUsageLimits = Effect.fn("readOpenCodeGoUsageLimits")(
 }) {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const unsupported = makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
-  if (!input.enabled || input.serverUrl.trim()) return unsupported;
+  if (!input.enabled || input.serverUrl.trim() || !agentSignInReadsAllowed(input.environment)) {
+    return unsupported;
+  }
 
   return yield* Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
