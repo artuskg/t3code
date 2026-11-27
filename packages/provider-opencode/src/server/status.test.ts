@@ -332,7 +332,7 @@ it.effect("does not read local credentials for external or disabled OpenCode ins
         ),
         Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       );
-      NodeAssert.equal(limits.unavailable?.reason, "unsupported");
+      NodeAssert.deepEqual(limits.unavailable, { reason: "unsupported" });
     }
   }),
 );
@@ -360,7 +360,10 @@ it.effect("reads no OpenCode Go key without the agent sign-in opt-in", () =>
       ),
       Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     );
-    NodeAssert.equal(limits.unavailable?.reason, "unsupported");
+    NodeAssert.deepEqual(limits.unavailable, {
+      reason: "unsupported",
+      message: "Limits not read: T3CODE_READ_AGENT_SIGN_INS is off.",
+    });
   }),
 );
 

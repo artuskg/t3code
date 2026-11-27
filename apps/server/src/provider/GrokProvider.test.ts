@@ -802,7 +802,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("readGrokAccount"
         ),
       );
       expect(email).toBeUndefined();
-      expect(limits.unavailable?.reason).toBe("unsupported");
+      expect(limits.unavailable).toEqual({
+        reason: "unsupported",
+        message: "Limits not read: T3CODE_READ_AGENT_SIGN_INS is off.",
+      });
     }),
   );
 

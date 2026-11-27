@@ -13,6 +13,7 @@ import {
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
+  signInReadsOffLimits,
 } from "@t3tools/provider-core/server/usageLimits";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
@@ -164,10 +165,7 @@ export const readGrokAccount = Effect.fn("readGrokAccount")(function* (
 ) {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   if (!agentSignInReadsAllowed(environment)) {
-    return {
-      email: undefined,
-      usageLimits: makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" }),
-    };
+    return { email: undefined, usageLimits: signInReadsOffLimits(checkedAt) };
   }
   const probeFailed = makeUnavailableUsageLimits({
     checkedAt,

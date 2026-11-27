@@ -18,6 +18,7 @@ import {
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
+  signInReadsOffLimits,
 } from "@t3tools/provider-core/server/usageLimits";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
@@ -92,9 +93,8 @@ export const readOpenCodeGoUsageLimits = Effect.fn("readOpenCodeGoUsageLimits")(
 }) {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const unsupported = makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
-  if (!input.enabled || input.serverUrl.trim() || !agentSignInReadsAllowed(input.environment)) {
-    return unsupported;
-  }
+  if (!input.enabled || input.serverUrl.trim()) return unsupported;
+  if (!agentSignInReadsAllowed(input.environment)) return signInReadsOffLimits(checkedAt);
 
   return yield* Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

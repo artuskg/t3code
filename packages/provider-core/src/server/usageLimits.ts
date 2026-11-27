@@ -38,6 +38,18 @@ export function makeUsageLimits(input: {
   return { checkedAt: input.checkedAt, windows: sortWindows(input.windows) };
 }
 
+/**
+ * Privacy fork: limits the opt-in kept T3 from reading. A bare "unsupported" would read as "this
+ * account has no subscription limits", which is not what happened.
+ */
+export function signInReadsOffLimits(checkedAt: string): ServerProviderUsageLimits {
+  return makeUnavailableUsageLimits({
+    checkedAt,
+    reason: "unsupported",
+    message: `Limits not read: ${AGENT_SIGN_IN_READS_ENV} is off.`,
+  });
+}
+
 export function makeUnavailableUsageLimits(input: {
   readonly checkedAt: string;
   readonly reason: "unsupported" | "probeFailed";
