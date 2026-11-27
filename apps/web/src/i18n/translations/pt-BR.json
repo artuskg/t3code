@@ -12979,5 +12979,7 @@
   "3ee30a50b70fffab": "Retirada por {by}: {reason}",
   "92e129bf413a1220": "retirada",
   "ac796f2bbd3c6d13": "Desativar o T3 Connect neste dispositivo",
-  "abdf8ff7dfe752ad": "Configurar o T3 Connect"
+  "abdf8ff7dfe752ad": "Configurar o T3 Connect",
+  "ca7a5cf993427034": "Este app não instala atualizações. Atualize pelo seu próprio pipeline de lançamento.",
+  "83c823cee2301835": "O T3 Code v{version} saiu no upstream. Nossa build de privacidade acompanha pelo T3 Maintenance."
 }

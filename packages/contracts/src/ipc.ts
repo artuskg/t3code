@@ -299,6 +299,8 @@ export interface DesktopUpdateState {
   channelBlockedByPolicy?: true;
   /** The check failed only because this build's track differs from the saved `channel`. */
   trackMismatch?: { readonly buildChannel: DesktopUpdateChannel };
+  /** Privacy build: an offered release is reported, never downloaded or installed. */
+  notifyOnly?: true;
 }
 
 export interface DesktopUpdateReleaseNote {
@@ -344,6 +346,8 @@ export const DesktopUpdateStateSchema = Schema.Struct({
   notAppliedVersion: Schema.optionalKey(Schema.String),
   channelBlockedByPolicy: Schema.optionalKey(Schema.Literal(true)),
   trackMismatch: Schema.optionalKey(Schema.Struct({ buildChannel: DesktopUpdateChannelSchema })),
+  /** Privacy build: an offered release is reported, never downloaded or installed. */
+  notifyOnly: Schema.optionalKey(Schema.Literal(true)),
 });
 
 export const DesktopCliCommandStateSchema = Schema.Struct({

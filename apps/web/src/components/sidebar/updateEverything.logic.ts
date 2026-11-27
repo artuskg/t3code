@@ -1,7 +1,4 @@
-import {
-  managedNightlyDeniedMessage,
-  managedUpdatesDenial,
-} from "@t3tools/client-runtime/contract-labels";
+import { managedNightlyDeniedMessage } from "@t3tools/client-runtime/contract-labels";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
 import {
   type DesktopUpdateChannel,
@@ -14,6 +11,7 @@ import { compareSemverVersions } from "@t3tools/shared/semver";
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "~/i18n/messages";
+import { managedUpdatesDenial } from "~/managedUpdates";
 import {
   resolveServerSelfUpdateCapability,
   resolveVersionMismatch,

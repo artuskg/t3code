@@ -54,6 +54,7 @@ export function getDesktopUpdateReleaseHistoryUrl(
 export function resolveDesktopUpdateButtonAction(
   state: DesktopUpdateState,
 ): DesktopUpdateButtonAction {
+  if (state.notifyOnly === true) return "none";
   if (
     state.downloadedVersion &&
     (state.status === "downloaded" ||
@@ -273,11 +274,31 @@ export function getDesktopUpdateDisabledReason(
   );
 }
 
+/** Privacy build: names a newer upstream release, which this build never installs itself. */
+export function getUpstreamReleaseNotice(
+  state: Pick<DesktopUpdateState, "status" | "availableVersion" | "notifyOnly"> | null,
+  resolve: MessageResolver = m,
+): string | null {
+  if (state?.notifyOnly !== true || state.status !== "available" || !state.availableVersion) {
+    return null;
+  }
+  return resolve(
+    msg("T3 Code v{version} is out upstream. Our privacy build follows through T3 Maintenance.", {
+      version: state.availableVersion,
+    }),
+  );
+}
+
 export function getDesktopUpdateIdleTooltip(
-  state: Pick<DesktopUpdateState, "enabled" | "status" | "message"> | null,
+  state: Pick<
+    DesktopUpdateState,
+    "enabled" | "status" | "message" | "availableVersion" | "notifyOnly"
+  > | null,
   managedDenial?: string,
   resolve: MessageResolver = m,
 ) {
+  const notice = getUpstreamReleaseNotice(state, resolve);
+  if (notice !== null) return { title: notice, detail: null };
   const disabledReason = getDesktopUpdateDisabledReason(state, managedDenial, resolve);
   return disabledReason
     ? { title: resolve(msg("Updates unavailable")), detail: disabledReason }

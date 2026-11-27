@@ -46,6 +46,7 @@ import {
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateDisabledReason,
   getDesktopUpdateInstallConfirmationMessage,
+  getUpstreamReleaseNotice,
   installDesktopUpdate,
   isDesktopUpdateButtonDisabled,
   resolveDesktopUpdateButtonAction,
@@ -336,7 +337,8 @@ function AboutVersionSection() {
   const description =
     action === "download" || action === "install"
       ? gt("Update available.")
-      : (getDesktopUpdateDisabledReason(updateState, updatesDenial, messages) ??
+      : (getUpstreamReleaseNotice(updateState, messages) ??
+        getDesktopUpdateDisabledReason(updateState, updatesDenial, messages) ??
         gt("Current version of the application."));
 
   return (

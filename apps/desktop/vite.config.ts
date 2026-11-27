@@ -5,6 +5,7 @@ import { defaultInclude, defineConfig } from "vite-plus";
 import { Rolldown } from "vite-plus/pack";
 
 import { isDesktopRuntimeExternalDependency } from "../../scripts/lib/desktop-external-packages.ts";
+import { electronUpdaterPrivacyPlugin } from "../../scripts/lib/electron-updater-privacy.ts";
 import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
 
 const repoEnv = loadRepoEnv();
@@ -25,6 +26,8 @@ const publicConfigDefine = {
   __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
     repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",
   ),
+  // Privacy build: report new upstream releases, never download or install them.
+  __T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__: "true",
 };
 
 const PAGE_WORLD_MODULE = /[\\/]src[\\/]preview[\\/]PageWorld\.ts$/;
@@ -95,6 +98,7 @@ export default defineConfig({
       sourcemap: true,
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
+      plugins: [electronUpdaterPrivacyPlugin()],
       outputOptions: { codeSplitting: false },
       entry: ["src/main.ts"],
       clean: true,

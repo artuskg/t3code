@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import type { DesktopUpdateState } from "@t3tools/contracts";
 
 import {
+  getDesktopUpdateIdleTooltip,
+  getUpstreamReleaseNotice,
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateReleaseHistoryUrl,
@@ -29,6 +31,36 @@ const baseState: DesktopUpdateState = {
   errorContext: null,
   canRetry: false,
 };
+
+describe("notify-only privacy build", () => {
+  it("names the upstream release and offers no download or install", () => {
+    const state: DesktopUpdateState = {
+      ...baseState,
+      status: "available",
+      availableVersion: "0.1.13",
+      notifyOnly: true,
+    };
+    expect(resolveDesktopUpdateButtonAction(state)).toBe("none");
+    expect(
+      resolveDesktopUpdateButtonAction({
+        ...state,
+        status: "downloaded",
+        downloadedVersion: "0.1.13",
+      }),
+    ).toBe("none");
+    const notice =
+      "T3 Code v0.1.13 is out upstream. Our privacy build follows through T3 Maintenance.";
+    expect(getUpstreamReleaseNotice(state)).toBe(notice);
+    expect(getDesktopUpdateIdleTooltip(state)).toEqual({ title: notice, detail: null });
+  });
+
+  it("says nothing extra when nothing newer is out or the build installs updates", () => {
+    expect(getUpstreamReleaseNotice({ ...baseState, notifyOnly: true })).toBeNull();
+    expect(
+      getUpstreamReleaseNotice({ ...baseState, status: "available", availableVersion: "0.1.13" }),
+    ).toBeNull();
+  });
+});
 
 describe("desktop update button state", () => {
   it("keeps retry action available after a download error", () => {

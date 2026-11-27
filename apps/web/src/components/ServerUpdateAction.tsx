@@ -5,7 +5,6 @@ import {
   type AuthSessionState,
   sessionGrantsScope,
 } from "@t3tools/contracts";
-import { managedUpdatesDenial } from "@t3tools/client-runtime/contract-labels";
 import type { AsyncResult } from "effect/reactivity";
 import { environmentSession } from "~/state/session";
 import type {
@@ -28,6 +27,7 @@ import { CircleArrowUpIcon } from "lucide-react";
 import { type ComponentProps, useRef, useState } from "react";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { m, type MessageResolver } from "../i18n/messages";
+import { managedUpdatesDenial } from "../managedUpdates";
 
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
@@ -201,6 +201,8 @@ export function ServerUpdatesAction({
   const serverConfigs = useServerConfigs();
   const pending = useRef(false);
   const [isPending, setIsPending] = useState(false);
+  // A build-wide denial (privacy desktop build) hides "Update all" instead of disabling it.
+  if (managedUpdatesDenial(undefined, messages) !== undefined) return null;
   const eligible = targets.filter(
     (target) =>
       target.selfUpdate !== null &&
@@ -461,6 +463,7 @@ export function OutdatedServerUpdateAction({
   readonly label?: string;
 }) {
   const gt = useGT();
+  const updatesDenial = managedUpdatesDenial(undefined, useMessages());
   const update = useAtomCommand(updateOutdatedServer, { reportFailure: false });
   const handleUpdate = async () => {
     if (pendingUpdateEnvironmentIds.has(environmentId)) return;
@@ -486,6 +489,9 @@ export function OutdatedServerUpdateAction({
       description: m(msg("Reconnected on t3@{version}.", { version: result.value.targetVersion })),
     });
   };
+  if (updatesDenial !== undefined) {
+    return <span className="text-muted-foreground text-xs">{updatesDenial}</span>;
+  }
   if (fromVersion !== undefined && crossesReleaseTrack(fromVersion, targetVersion)) {
     return <CrossTrackNote />;
   }

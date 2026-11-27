@@ -12988,5 +12988,7 @@
   "3ee30a50b70fffab": "Withdrawn by {by}: {reason}",
   "92e129bf413a1220": "withdrawn",
   "ac796f2bbd3c6d13": "Turn off T3 Connect on this device",
-  "abdf8ff7dfe752ad": "Set up T3 Connect"
+  "abdf8ff7dfe752ad": "Set up T3 Connect",
+  "ca7a5cf993427034": "This app doesn't install updates. Update through your own release pipeline.",
+  "83c823cee2301835": "T3 Code v{version} is out upstream. Our privacy build follows through T3 Maintenance."
 }

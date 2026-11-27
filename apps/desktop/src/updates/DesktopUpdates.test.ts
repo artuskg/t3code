@@ -91,6 +91,50 @@ const nextPublishedState = (emit: () => void) =>
   });
 
 describe("DesktopUpdates", () => {
+  it.effect(
+    "a notify-only build reports an upstream release but never downloads or installs",
+    () => {
+      const flag = globalThis as { __T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__?: boolean };
+      const harness = makeHarness();
+      return Effect.scoped(
+        Effect.gen(function* () {
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              flag.__T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__ = true;
+            }),
+            () =>
+              Effect.sync(() => {
+                delete flag.__T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__;
+              }),
+          );
+          assert.isTrue(DesktopUpdates.isNotifyOnlyBuild());
+          const updates = yield* DesktopUpdates.DesktopUpdates;
+          const desktopState = yield* DesktopState.DesktopState;
+          yield* updates.configure;
+          assert.isFalse(yield* Ref.get(desktopState.canInstallUpdates));
+
+          harness.emit("update-available", { version: "1.2.4" });
+          yield* flushCallbacks;
+          const offered = yield* updates.getState;
+          assert.equal(offered.status, "available");
+          assert.equal(offered.availableVersion, "1.2.4");
+          assert.isTrue(offered.notifyOnly);
+
+          const download = yield* updates.download;
+          assert.isFalse(download.accepted);
+          const install = yield* updates.install;
+          assert.isFalse(install.accepted);
+          assert.equal(harness.downloadCount(), 0);
+          assert.equal((yield* updates.getState).status, "available");
+        }),
+      ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+    },
+  );
+
+  it("is not notify-only outside the privacy bundle", () => {
+    assert.isFalse(DesktopUpdates.isNotifyOnlyBuild());
+  });
+
   it.effect("updates Linux .deb installs and leaves other non-AppImage installs off", () =>
     Effect.gen(function* () {
       const linuxState = (packageType: string | undefined) =>

@@ -60,6 +60,19 @@ import {
   resolveNotAppliedInstallVersion,
 } from "./updateMachine.ts";
 
+declare const __T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__: boolean | undefined;
+
+/**
+ * Privacy build (set by vite.config.ts): checks still tell the user about new upstream releases,
+ * but nothing is downloaded or installed over this build. Tests run unbundled, with it off.
+ */
+export function isNotifyOnlyBuild(): boolean {
+  return (
+    typeof __T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__ !== "undefined" &&
+    __T3CODE_DESKTOP_UPDATES_NOTIFY_ONLY__ === true
+  );
+}
+
 const CHANNEL_CHANGE_RETRY_DELAY = Duration.seconds(1);
 const CHANNEL_CHANGE_RETRIES = 30;
 const AUTO_UPDATE_STARTUP_DELAY = "15 seconds";
@@ -436,12 +449,14 @@ export const make = Effect.gen(function* () {
     Effect.flatMap((state) => electronWindow.sendAll(IpcChannels.UPDATE_STATE_CHANNEL, state)),
   );
 
-  const setState = (state: DesktopUpdateState): Effect.Effect<void> =>
-    stateMutex
+  const setState = (next: DesktopUpdateState): Effect.Effect<void> => {
+    const state: DesktopUpdateState = isNotifyOnlyBuild() ? { ...next, notifyOnly: true } : next;
+    return stateMutex
       .withPermits(1)(
         Ref.set(updateStateRef, state).pipe(Effect.andThen(PubSub.publish(stateChanges, state))),
       )
       .pipe(Effect.andThen(emitState));
+  };
 
   const updateState = (
     f: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -660,6 +675,7 @@ export const make = Effect.gen(function* () {
   const downloadAvailableUpdate = Effect.fn("desktop.updates.downloadAvailableUpdate")(function* (
     refresh: boolean,
   ) {
+    if (isNotifyOnlyBuild()) return { accepted: false, completed: false };
     const admission = yield* Effect.scoped(
       admitAfterCheck(
         Effect.gen(function* () {
@@ -1014,7 +1030,7 @@ export const make = Effect.gen(function* () {
   const installWithExpectedVersion = Effect.fn("desktop.updates.install")(function* (
     expectedVersion?: string,
   ) {
-    if (yield* Ref.get(desktopState.quitting)) {
+    if (isNotifyOnlyBuild() || (yield* Ref.get(desktopState.quitting))) {
       return {
         accepted: false,
         completed: false,
@@ -1353,7 +1369,10 @@ export const make = Effect.gen(function* () {
       const settings = yield* desktopSettings.get;
       const disabledReason = yield* resolveDisabledReason;
       // A blocked nightly channel still lets the user switch back to stable, so it stays updatable.
-      yield* Ref.set(desktopState.canInstallUpdates, Option.isNone(disabledReason));
+      yield* Ref.set(
+        desktopState.canInstallUpdates,
+        Option.isNone(disabledReason) && !isNotifyOnlyBuild(),
+      );
       yield* setState(
         yield* baseUpdateState(
           settings.updateChannel,
