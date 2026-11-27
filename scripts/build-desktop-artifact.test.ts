@@ -543,7 +543,15 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.isUndefined(mac.protocols);
       assert.notProperty(mac.extendInfo, "CFBundleURLTypes");
       assert.notProperty(mac.extendInfo, "CFBundleDocumentTypes");
-      const linux = yield* createBuildConfig("linux", "AppImage", "0.1.12-privacy.1", false, false);
+      const linux = yield* createBuildConfig(
+        "linux",
+        "AppImage",
+        "0.1.12-privacy.1",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
       assert.isUndefined((linux.linux as { protocols?: unknown }).protocols);
     }),
   );
