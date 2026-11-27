@@ -68,6 +68,8 @@ const layerTestHttpClient = Layer.succeed(
 
 // The mock CLIs from makeTildeProviderFixtures are scripts Windows cannot execute.
 const windowsHost = HostProcess.Platform.defaultValue() === "win32";
+// Privacy fork: Claude's organization ID and reset credits are read only with this opt-in.
+const SIGN_IN_READS = { name: "T3CODE_READ_AGENT_SIGN_INS", value: "1", sensitive: false };
 
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
 
@@ -678,6 +680,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
           [claudeId]: {
             driver: ProviderDriverKind.make("claudeAgent"),
             enabled: true,
+            environment: [SIGN_IN_READS],
             config: makeClaudeConfig({
               enabled: true,
               binaryPath: fixtures.claudeBinaryPath,
@@ -801,6 +804,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
             driver: ProviderDriverKind.make("claudeAgent"),
             enabled: true,
             environment: [
+              SIGN_IN_READS,
               { name: "T3_CLAUDE_RESET_MARKER", value: marker, sensitive: false },
               ...(claim.usageFailsAfterClaim
                 ? [{ name: "T3_CLAUDE_USAGE_FAILS_AFTER_CLAIM", value: "1", sensitive: false }]
