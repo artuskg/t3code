@@ -4,7 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { loadRepoEnv } from "./public-config.ts";
+import { loadRepoEnv, withoutConnectStamps } from "./public-config.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -76,6 +76,36 @@ describe("loadRepoEnv", () => {
 
     expect(Object.keys(env).filter((name) => name.includes("OTLP_TRACES"))).toEqual([]);
     expect(env.T3CODE_RELAY_URL).toBe("https://ci.example.test");
+  });
+});
+
+describe("withoutConnectStamps (privacy desktop)", () => {
+  it("drops every Clerk and relay value from any source and keeps the rest", () => {
+    const repoRoot = makeTemporaryDirectory();
+    NodeFS.writeFileSync(
+      NodePath.join(repoRoot, ".env"),
+      "T3CODE_CLERK_PUBLISHABLE_KEY=pk_root\nT3CODE_RELAY_URL=https://root.example.test\n",
+    );
+    NodeFS.writeFileSync(
+      NodePath.join(repoRoot, ".env.local"),
+      "VITE_CLERK_JWT_TEMPLATE=template_local\nVITE_T3CODE_RELAY_URL=https://local.example.test\n",
+    );
+    const env = withoutConnectStamps(
+      loadRepoEnv({
+        baseEnv: {
+          T3CODE_CLERK_PUBLISHABLE_KEY: "pk_ci",
+          VITE_CLERK_PUBLISHABLE_KEY: "pk_ci",
+          T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: "oauth_ci",
+          VITE_CLERK_CLI_OAUTH_CLIENT_ID: "oauth_ci",
+          T3CODE_RELAY_URL: "https://ci.example.test",
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: "owner/repo",
+        },
+        repoRoot,
+      }),
+    );
+
+    expect(Object.keys(env).filter((name) => /CLERK|RELAY_URL/u.test(name))).toEqual([]);
+    expect(env.T3CODE_DESKTOP_UPDATE_REPOSITORY).toBe("owner/repo");
   });
 });
 

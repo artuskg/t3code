@@ -12989,5 +12989,6 @@
   "83c823cee2301835": "T3 Code v{version} har släppts uppströms. Vårt integritetsbygge följer via T3 Maintenance.",
   "d388013849068ce4": "Läs in video från {host}",
   "5c0871bc63e482fe": "Läs in ljud från {host}",
-  "402dbc52161d1b40": "Läs in bild från {host}"
+  "402dbc52161d1b40": "Läs in bild från {host}",
+  "a5d1a149ad32f222": "T3 Connect finns inte i integritetsbygget. Länka en värd med t3 connect på den värden."
 }

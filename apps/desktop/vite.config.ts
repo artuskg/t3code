@@ -6,9 +6,17 @@ import { Rolldown } from "vite-plus/pack";
 
 import { isDesktopRuntimeExternalDependency } from "../../scripts/lib/desktop-external-packages.ts";
 import { electronUpdaterPrivacyPlugin } from "../../scripts/lib/electron-updater-privacy.ts";
-import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
+import { loadRepoEnv, withoutConnectStamps } from "../../scripts/lib/public-config.ts";
 
-const repoEnv = loadRepoEnv();
+const repoEnv = withoutConnectStamps(loadRepoEnv());
+// Privacy desktop build: Connect is left out, so main and preload bundle no Clerk bridge.
+const clerkBridgeStub = {
+  alias: {
+    "@clerk/electron/storage": `${import.meta.dirname}/src/app/clerkBridgeStub.ts`,
+    "@clerk/electron/preload": `${import.meta.dirname}/src/app/clerkBridgeStub.ts`,
+    "@clerk/electron": `${import.meta.dirname}/src/app/clerkBridgeStub.ts`,
+  },
+};
 const domTests = ["src/preview/PickPreload.test.ts"];
 
 // Install only bundle externals; the server bundle already carries its dependency tree.
@@ -100,6 +108,7 @@ export default defineConfig({
       sourcemap: true,
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
+      ...clerkBridgeStub,
       plugins: [electronUpdaterPrivacyPlugin()],
       outputOptions: { codeSplitting: false },
       entry: ["src/main.ts"],
@@ -152,9 +161,10 @@ export default defineConfig({
       sourcemap: true,
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
+      ...clerkBridgeStub,
       entry: ["src/preload.ts"],
       deps: {
-        // Sandboxed preloads cannot resolve imports inside ASAR; bundle Clerk's bridge.
+        // Sandboxed preloads cannot resolve imports inside ASAR; bundle (here: the stub of) Clerk's bridge.
         alwaysBundle: (id) => id === "@clerk/electron" || id.startsWith("@clerk/electron/"),
       },
     },

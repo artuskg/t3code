@@ -12982,5 +12982,6 @@
   "83c823cee2301835": "T3 Code v{version} est sorti en amont. Notre build privé suit via T3 Maintenance.",
   "d388013849068ce4": "Charger la vidéo depuis {host}",
   "5c0871bc63e482fe": "Charger l'audio depuis {host}",
-  "402dbc52161d1b40": "Charger l'image depuis {host}"
+  "402dbc52161d1b40": "Charger l'image depuis {host}",
+  "a5d1a149ad32f222": "T3 Connect n'est pas disponible dans le build privé. Liez un hôte avec t3 connect sur cet hôte."
 }

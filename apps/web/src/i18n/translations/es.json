@@ -12977,5 +12977,6 @@
   "83c823cee2301835": "T3 Code v{version} ya está disponible upstream. Nuestra versión privada llega a través de T3 Maintenance.",
   "d388013849068ce4": "Cargar video de {host}",
   "5c0871bc63e482fe": "Cargar audio de {host}",
-  "402dbc52161d1b40": "Cargar imagen de {host}"
+  "402dbc52161d1b40": "Cargar imagen de {host}",
+  "a5d1a149ad32f222": "T3 Connect no está disponible en la versión privada. Vincula un host con t3 connect en ese host."
 }

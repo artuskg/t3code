@@ -12991,5 +12991,6 @@
   "83c823cee2301835": "T3 Code v{version} is out upstream. Our privacy build follows through T3 Maintenance.",
   "d388013849068ce4": "Load video from {host}",
   "5c0871bc63e482fe": "Load audio from {host}",
-  "402dbc52161d1b40": "Load image from {host}"
+  "402dbc52161d1b40": "Load image from {host}",
+  "a5d1a149ad32f222": "T3 Connect isn't available in the privacy build. Link a host with t3 connect on that host."
 }

@@ -1543,7 +1543,8 @@ const stageKeyringNativeBinaries = Effect.fn("stageKeyringNativeBinaries")(funct
 });
 
 // Stage pnpm-nested Clerk binaries beside index.js so the loader finds them and electron-builder unpacks them.
-const stageClerkPasskeyNativeBinaries = Effect.fn("stageClerkPasskeyNativeBinaries")(function* (
+// Privacy desktop build: Connect is left out, so no Clerk passkey addon is staged.
+const _stageClerkPasskeyNativeBinaries = Effect.fn("stageClerkPasskeyNativeBinaries")(function* (
   stageAppDir: string,
   platform: typeof BuildPlatform.Type,
   arch: typeof BuildArch.Type,
@@ -3909,7 +3910,6 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     }),
     { label: "vp install --prod", verbose: options.verbose },
   );
-  yield* stageClerkPasskeyNativeBinaries(stageAppDir, options.platform, options.arch);
   yield* stageKeyringNativeBinaries(stageAppDir, options.platform, options.arch);
 
   if (options.platform === "win" && windowsServerAsarPath) {

@@ -19,6 +19,16 @@ const REPO_ROOT = NodePath.resolve(NodeURL.fileURLToPath(import.meta.url), "../.
 // build, whether it comes from the environment, .env or .env.local.
 const TRACE_ENV_NAME = /OTLP_TRACES_/;
 
+// Privacy desktop: T3 Connect is left out, so no Clerk or relay value reaches the web, server or
+// desktop bundles of this app.
+const CONNECT_ENV_NAME = /CLERK_|RELAY_URL$/;
+
+export function withoutConnectStamps(
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !CONNECT_ENV_NAME.test(name)));
+}
+
 export function loadRepoEnv({
   baseEnv = process.env,
   repoRoot = REPO_ROOT,

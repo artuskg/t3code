@@ -1,15 +1,17 @@
 import { UserButton, useAuth } from "@clerk/react";
 import { T, useMessages } from "gt-react";
-import { LogInIcon, RotateCwIcon } from "lucide-react";
+import { CloudOffIcon, LogInIcon, RotateCwIcon } from "lucide-react";
 
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import { isElectron } from "../../env";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { retryClerkLoad, useClerkLoadFailed } from "./clerkLoadFailure";
 import { T3_CONNECT_ACCOUNT_PAGES } from "./T3ConnectAccountPages";
 import { useT3ConnectAuthPrompt } from "./useT3ConnectAuthPrompt";
 
 export function T3ConnectSidebarSignIn() {
-  if (!hasCloudPublicConfig()) return null;
+  // Privacy desktop build: Connect (and Clerk) are left out at build time.
+  if (!hasCloudPublicConfig()) return isElectron ? <T3ConnectUnavailableNote /> : null;
 
   return <ConfiguredT3ConnectSidebarSignIn />;
 }
@@ -80,6 +82,22 @@ function ConfiguredT3ConnectSidebarSignIn() {
             <T>Sign in to T3 Connect</T>
           </span>
         </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
+function T3ConnectUnavailableNote() {
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <div className="flex gap-2 px-2 py-1.5 text-muted-foreground text-xs">
+          <CloudOffIcon className="mt-0.5 size-3.5 shrink-0" />
+          <T>
+            T3 Connect isn't available in the privacy build. Link a host with t3 connect on that
+            host.
+          </T>
+        </div>
       </SidebarMenuItem>
     </SidebarMenu>
   );

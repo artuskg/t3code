@@ -12982,5 +12982,6 @@
   "83c823cee2301835": "T3 Code v{version} ist upstream erschienen. Unser Privacy-Build folgt über T3 Maintenance.",
   "d388013849068ce4": "Video von {host} laden",
   "5c0871bc63e482fe": "Audio von {host} laden",
-  "402dbc52161d1b40": "Bild von {host} laden"
+  "402dbc52161d1b40": "Bild von {host} laden",
+  "a5d1a149ad32f222": "T3 Connect ist im Privacy-Build nicht verfügbar. Verknüpfe einen Host mit t3 connect auf diesem Host."
 }

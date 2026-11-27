@@ -94,6 +94,8 @@
         "src/compileCache.ts!",
         "src/serverCompileCache.ts!",
         "src/main.ts!",
+        // vite.config.ts aliases the Clerk Electron packages to this stub (privacy build).
+        "src/app/clerkBridgeStub.ts!",
         "src/preload.ts!",
         "src/preview-pick-preload.ts!",
         "src/preview-pip-preload.ts!",
@@ -107,7 +109,8 @@
     "apps/web": {
       // Worktree setup (scripts/setup-worktree.ts) runs this directly, and evidence
       // fixtures run under node.
-      "entry": ["scripts/warm-dep-cache.ts", "test/fixtures/**/*.mjs"],
+      // vite.config.ts aliases the Clerk packages to this stub in privacy desktop builds.
+      "entry": ["scripts/warm-dep-cache.ts", "test/fixtures/**/*.mjs", "src/cloud/clerkStub.tsx"],
       // UI component modules are copied and adapted as cohesive sets. Keep their
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.

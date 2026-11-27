@@ -15,14 +15,14 @@ import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
 
 import { DEV_PROXIED_PATH_PREFIXES } from "@t3tools/shared/devProxy";
 
-import { loadRepoEnv } from "../../scripts/lib/public-config";
+import { loadRepoEnv, withoutConnectStamps } from "../../scripts/lib/public-config";
 import { resolveTaggedSourceVersion } from "../../scripts/lib/tagged-source-version";
 import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
 import { tailwindPlugins } from "./vite/tailwind";
 import { warmBundledDevPlugin } from "./vite/warmBundledDev";
 import { formatAppDisplayName, resolveWebAppStageLabel } from "./src/branding.logic";
 
-const repoEnv = loadRepoEnv();
+const repoEnv = withoutConnectStamps(loadRepoEnv());
 Object.assign(process.env, repoEnv);
 
 // Signal single-origin dev explicitly; loadRepoEnv can restore deleted URL keys from .env.
@@ -382,6 +382,17 @@ export default defineConfig(({ command }) => {
     resolve: {
       tsconfigPaths: true,
       dedupe: ["react", "react-dom"],
+      // Privacy desktop build: no Clerk SDK in the bundle (Connect is left out).
+      ...(command === "build"
+        ? {
+            alias: [
+              {
+                find: /^@clerk\/(?:react|electron\/react|electron\/passkeys)$/u,
+                replacement: `${import.meta.dirname}/src/cloud/clerkStub.tsx`,
+              },
+            ],
+          }
+        : {}),
     },
     experimental: {
       bundledDev,
