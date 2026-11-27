@@ -12983,5 +12983,8 @@
   "d388013849068ce4": "Carregar vídeo de {host}",
   "5c0871bc63e482fe": "Carregar áudio de {host}",
   "402dbc52161d1b40": "Carregar imagem de {host}",
-  "a5d1a149ad32f222": "O T3 Connect não está disponível na build de privacidade. Vincule um host com t3 connect nesse host."
+  "a5d1a149ad32f222": "O T3 Connect não está disponível na build de privacidade. Vincule um host com t3 connect nesse host.",
+  "bac84189a0aaa506": "Escolhe qual feed este app verifica para novas builds. Não instala nada.",
+  "c4d2d4eecd0d5905": "Verificar builds {label}?",
+  "4a9a2d0a7d5f04de": "Este app só verifica o feed {label} e avisa sobre novas builds. Baixe e instale-as você mesmo."
 }

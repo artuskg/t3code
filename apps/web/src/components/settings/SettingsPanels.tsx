@@ -403,6 +403,8 @@ function AboutVersionSection() {
                   <T>Review</T>
                 </Button>
               </>
+            ) : updateState?.notifyOnly === true ? (
+              gt("Chooses which feed this app checks for new builds. It installs nothing.")
             ) : (
               gt(
                 "Switches this app and every connected machine whose database the target release supports.",

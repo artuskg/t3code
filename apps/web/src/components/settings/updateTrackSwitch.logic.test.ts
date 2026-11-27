@@ -149,4 +149,18 @@ describe("localUpdaterStaysPut", () => {
     expect(localUpdaterStaysPut({ enabled: false }, "latest")).toBe(true);
     expect(localUpdaterStaysPut({ enabled: true }, "nightly")).toBe(false);
   });
+
+  it("keeps a notify-only app put, so switching only saves the feed it checks", async () => {
+    expect(localUpdaterStaysPut({ enabled: true, notifyOnly: true }, "nightly")).toBe(true);
+    expect(localUpdaterStaysPut({ enabled: true, notifyOnly: true }, "latest")).toBe(true);
+    const { bridge, saved } = fakeBridge("0.1.5-nightly.20261101.1");
+    const prepared = await prepareLocalTrackSwitch(bridge, {
+      channel: "nightly",
+      version: "0.1.5-nightly.20261101.1",
+      reinstall: !localUpdaterStaysPut({ enabled: true, notifyOnly: true }, "nightly"),
+    });
+    // No reinstall plan: the dialog gets no local state, so it schedules no download or install.
+    expect(prepared).toEqual({ ok: true, local: null });
+    expect(saved).toEqual(["nightly"]);
+  });
 });

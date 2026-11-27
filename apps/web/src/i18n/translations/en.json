@@ -12992,5 +12992,8 @@
   "d388013849068ce4": "Load video from {host}",
   "5c0871bc63e482fe": "Load audio from {host}",
   "402dbc52161d1b40": "Load image from {host}",
-  "a5d1a149ad32f222": "T3 Connect isn't available in the privacy build. Link a host with t3 connect on that host."
+  "a5d1a149ad32f222": "T3 Connect isn't available in the privacy build. Link a host with t3 connect on that host.",
+  "bac84189a0aaa506": "Chooses which feed this app checks for new builds. It installs nothing.",
+  "c4d2d4eecd0d5905": "Check {label} builds?",
+  "4a9a2d0a7d5f04de": "This app only checks the {label} feed and tells you about new builds. Download and install them yourself."
 }

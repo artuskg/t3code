@@ -12978,5 +12978,8 @@
   "d388013849068ce4": "Cargar video de {host}",
   "5c0871bc63e482fe": "Cargar audio de {host}",
   "402dbc52161d1b40": "Cargar imagen de {host}",
-  "a5d1a149ad32f222": "T3 Connect no está disponible en la versión privada. Vincula un host con t3 connect en ese host."
+  "a5d1a149ad32f222": "T3 Connect no está disponible en la versión privada. Vincula un host con t3 connect en ese host.",
+  "bac84189a0aaa506": "Elige qué canal consulta esta app para buscar nuevas versiones. No instala nada.",
+  "c4d2d4eecd0d5905": "¿Consultar versiones {label}?",
+  "4a9a2d0a7d5f04de": "Esta app solo consulta el canal {label} y te avisa de nuevas versiones. Descárgalas e instálalas tú mismo."
 }

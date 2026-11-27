@@ -12983,5 +12983,8 @@
   "d388013849068ce4": "Charger la vidéo depuis {host}",
   "5c0871bc63e482fe": "Charger l'audio depuis {host}",
   "402dbc52161d1b40": "Charger l'image depuis {host}",
-  "a5d1a149ad32f222": "T3 Connect n'est pas disponible dans le build privé. Liez un hôte avec t3 connect sur cet hôte."
+  "a5d1a149ad32f222": "T3 Connect n'est pas disponible dans le build privé. Liez un hôte avec t3 connect sur cet hôte.",
+  "bac84189a0aaa506": "Choisit le flux que cette app vérifie pour les nouvelles versions. Elle n'installe rien.",
+  "c4d2d4eecd0d5905": "Vérifier les versions {label} ?",
+  "4a9a2d0a7d5f04de": "Cette app vérifie seulement le flux {label} et vous signale les nouvelles versions. Téléchargez-les et installez-les vous-même."
 }

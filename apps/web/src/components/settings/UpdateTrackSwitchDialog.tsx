@@ -100,6 +100,7 @@ function SwitchPlan({
   const { environments } = useEnvironments();
   const crossesLocal = desktopUpdateChannelOf(APP_VERSION) !== release.channel;
   const updatesOff = localUpdaterStaysPut(updateState, release.channel);
+  const notifyOnly = updateState?.notifyOnly === true;
   // After a partial switch this app may already be on the track; then only remotes move.
   const switchesLocal = crossesLocal && !updatesOff;
   const [checking, setChecking] = useState(false);
@@ -204,21 +205,36 @@ function SwitchPlan({
     <UpdateEverythingDialog
       open
       onOpenChange={(open) => !open && !checking && onClose()}
-      title={gt("Switch to {label}?", { label })}
+      title={
+        notifyOnly ? gt("Check {label} builds?", { label }) : gt("Switch to {label}?", { label })
+      }
       version={release.version}
       providerCount={0}
       rows={everything.rows}
       notes={[
         ...(idle.note === null ? [] : [idle.note]),
-        ...(crossesLocal && updatesOff
-          ? [gt("This app's updates are off here, so reinstall it yourself to switch.")]
-          : []),
+        ...(notifyOnly
+          ? [
+              gt(
+                "This app only checks the {label} feed and tells you about new builds. Download and install them yourself.",
+                { label },
+              ),
+            ]
+          : crossesLocal && updatesOff
+            ? [gt("This app's updates are off here, so reinstall it yourself to switch.")]
+            : []),
         ...(switchesLocal && isMacPlatform(navigator.platform)
           ? [gt("If T3 Code does not reopen after it restarts, open it again.")]
           : []),
       ]}
       restarts={everything.restarts}
-      confirmLabel={checking ? gt("Checking…") : gt("Switch to {label}", { label })}
+      confirmLabel={
+        checking
+          ? gt("Checking…")
+          : notifyOnly
+            ? gt("Check {label}", { label })
+            : gt("Switch to {label}", { label })
+      }
       busy={checking}
       disabledReason={switchesLocal && localBlocked !== null ? localBlocked : idle.disabledReason}
       onConfirm={() => void run()}
