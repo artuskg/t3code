@@ -274,6 +274,7 @@ const makeTestRelay = Effect.fnUntraced(function* (
     readonly url: string;
     readonly authorization: string | null;
     readonly state: RelayAgentActivityState | null;
+    readonly body: string;
   }> = [];
   const fetch: typeof globalThis.fetch = Object.assign(
     (
@@ -284,13 +285,13 @@ const makeTestRelay = Effect.fnUntraced(function* (
       if (typeof body !== "string" && !(body instanceof Uint8Array)) {
         return Promise.reject(new Error("Expected a serialized activity publish payload"));
       }
-      const payload = decodePublishPayload(
-        typeof body === "string" ? body : new TextDecoder().decode(body),
-      );
+      const text = typeof body === "string" ? body : new TextDecoder().decode(body);
+      const payload = decodePublishPayload(text);
       publications.push({
         url: String(input),
         authorization: new Headers(init?.headers).get("authorization"),
         state: payload.state,
+        body: text,
       });
       try {
         return Promise.resolve(
@@ -350,7 +351,7 @@ describe("AgentAwarenessRelay", () => {
       );
       const setShell = (next: OrchestrationV2ThreadShell) =>
         Ref.update(shells, (current) => new Map(current).set(next.id, next));
-      const { relay, publications } = yield* makeTestRelay({
+      const { relay, secrets, publications } = yield* makeTestRelay({
         readShell: (threadId) =>
           Ref.get(shells).pipe(Effect.map((current) => current.get(threadId) ?? null)),
       });
@@ -362,17 +363,20 @@ describe("AgentAwarenessRelay", () => {
       assert.isTrue(publications[1]?.url.includes(`/threads/${THREAD_ID}/`) ?? false);
       assert.equal(publications[1]?.state?.phase, "waiting_for_approval");
 
-      // A rename keeps the same request's alert time, so the phone doesn't re-alert.
+      // A relink republishes the same request with its first alert time, so the phone doesn't re-alert.
       yield* setShell(
         shell({
           status: "completed",
-          title: "Renamed thread",
           updatedAt: DateTime.makeUnsafe("2026-09-04T12:01:00.000Z"),
         }),
       );
+      yield* secrets.set(
+        RELAY_ENVIRONMENT_CREDENTIAL_SECRET,
+        new TextEncoder().encode("credential-2"),
+      );
       yield* relay.publishThread(THREAD_ID);
       assert.equal(publications.length, 3);
-      assert.equal(publications[2]?.state?.threadTitle, "Renamed thread");
+      assert.equal(publications[2]?.state?.phase, "waiting_for_approval");
       assert.equal(publications[2]?.state?.updatedAt, publications[1]?.state?.updatedAt);
 
       yield* setShell(waitingChild({ pendingRuntimeRequest: null }));
@@ -647,7 +651,7 @@ describe("AgentAwarenessRelay", () => {
     }),
   );
 
-  it.effect("deduplicates state and republishes title changes", () =>
+  it.effect("deduplicates state, and title or model changes send nothing", () =>
     Effect.gen(function* () {
       const { relay, currentShell, publications } = yield* makeTestRelay();
       yield* relay.publishThread(THREAD_ID);
@@ -657,10 +661,110 @@ describe("AgentAwarenessRelay", () => {
       );
       yield* relay.publishThread(THREAD_ID);
       assert.equal(publications.length, 1);
-      yield* Ref.set(currentShell, shell({ title: "Renamed thread" }));
+      yield* Ref.set(
+        currentShell,
+        shell({
+          title: "Renamed thread",
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "other-model" },
+        }),
+      );
       yield* relay.publishThread(THREAD_ID);
-      assert.equal(publications.length, 2);
-      assert.equal(publications[1]?.state?.threadTitle, "Renamed thread");
+      assert.equal(publications.length, 1);
+    }),
+  );
+
+  // Text that must never reach the relay, as JSON string values or inside the signed proof.
+  const PRIVATE_TEXT = [
+    '"Project"',
+    "/workspace",
+    "Fix the payments login bug",
+    "secret-model-name",
+    "Review the completed task.",
+    "The agent run failed.",
+  ];
+
+  const decodeProofPayload = (body: string): string => {
+    const proof: unknown = JSON.parse(body).proof;
+    assert.isString(proof);
+    const part = (proof as string).split(".")[1] ?? "";
+    return Buffer.from(part, "base64url").toString("utf8");
+  };
+
+  it.effect.each([
+    { phase: "starting", headline: "Starting agent", thread: { status: "starting" } },
+    { phase: "running", headline: "Agent is working", thread: { status: "running" } },
+    {
+      phase: "waiting_for_approval",
+      headline: "Approval needed",
+      thread: {
+        pendingRuntimeRequest: {
+          id: RuntimeRequestId.make("approval-request"),
+          kind: "command",
+          createdAt: DateTime.makeUnsafe(NOW),
+        },
+      },
+    },
+    {
+      phase: "waiting_for_input",
+      headline: "Waiting for input",
+      thread: {
+        pendingRuntimeRequest: {
+          id: RuntimeRequestId.make("input-request"),
+          kind: "user_input",
+          createdAt: DateTime.makeUnsafe(NOW),
+        },
+      },
+    },
+    {
+      phase: "completed",
+      headline: "Agent finished",
+      thread: { status: "completed", latestRunCompletedAt: DateTime.makeUnsafe(NOW) },
+    },
+    {
+      phase: "failed",
+      headline: "Agent failed",
+      thread: { status: "failed", latestRunCompletedAt: DateTime.makeUnsafe(NOW) },
+    },
+  ] satisfies ReadonlyArray<{
+    phase: RelayAgentActivityState["phase"];
+    headline: string;
+    thread: Partial<OrchestrationV2ThreadShell>;
+  }>)("sends only the kind and thread IDs for a $phase publish", ({ phase, headline, thread }) =>
+    Effect.gen(function* () {
+      const { relay, currentShell, publications } = yield* makeTestRelay();
+      yield* Ref.set(
+        currentShell,
+        shell({
+          title: "Fix the payments login bug",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "secret-model-name",
+          },
+          ...thread,
+        }),
+      );
+      yield* relay.publishThread(THREAD_ID);
+      yield* TestClock.adjust("5 seconds");
+      yield* relay.drain;
+      assert.equal(publications.length, 1);
+      assert.deepStrictEqual(publications[0]?.state, {
+        environmentId: EnvironmentId.make("relay-environment"),
+        threadId: THREAD_ID,
+        projectTitle: "T3 Code",
+        threadTitle: headline,
+        phase,
+        headline,
+        modelTitle: "Agent",
+        updatedAt: NOW,
+        deepLink: `/threads/relay-environment/${THREAD_ID}`,
+      });
+      const body = publications[0]?.body ?? "";
+      const proof = decodeProofPayload(body);
+      assert.include(proof, `"phase":"${phase}"`);
+      for (const text of PRIVATE_TEXT) {
+        assert.notInclude(body, text);
+        assert.notInclude(proof, text);
+      }
     }),
   );
 
@@ -1215,8 +1319,8 @@ it.effect("catches up after startup without polling after success", () =>
     assert.equal(publications.length, 1);
     assert.include(publications[0]?.state, {
       threadId: THREAD_ID,
-      projectTitle: "Project",
-      threadTitle: "Thread",
+      projectTitle: "T3 Code",
+      threadTitle: "Agent is working",
       phase: "running",
     });
 

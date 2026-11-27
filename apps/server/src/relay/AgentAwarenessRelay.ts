@@ -203,24 +203,30 @@ function resolveAgentActivityPublishingStartupState(input: {
   return input.publishEnabled ? "enabled" : "disabled";
 }
 
-const RELAY_AGENT_ACTIVITY_DETAIL_MAX_LENGTH = 160;
-const REDACTED_RELAY_AGENT_FAILURE_DETAIL = "The agent run failed.";
 const RELAY_AGENT_ACTIVITY_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 // Nothing else re-queues a thread when the network returns, so a lost terminal state is retried until it lands.
 const RELAY_AGENT_ACTIVITY_STEADY_RETRY_DELAY_MS = 60_000;
 
-function sanitizeRelayAgentActivityState(
+// Privacy fork: the relay stores this state and sends its text to Apple and Google, so it carries
+// only the phase and the IDs that open the thread. The relay requires non-empty titles, so they
+// hold generic text: the phone shows "<headline>" over "<status>: T3 Code".
+function minimizeRelayAgentActivityState(
   state: RelayAgentActivityState | null,
 ): RelayAgentActivityState | null {
   if (state === null) {
     return null;
   }
-  const { detail: _detail, ...rest } = state;
-  const detail = (state.phase === "failed" ? REDACTED_RELAY_AGENT_FAILURE_DETAIL : state.detail)
-    ?.trim()
-    .slice(0, RELAY_AGENT_ACTIVITY_DETAIL_MAX_LENGTH)
-    .trim();
-  return detail ? { ...rest, detail } : rest;
+  return {
+    environmentId: state.environmentId,
+    threadId: state.threadId,
+    projectTitle: "T3 Code",
+    threadTitle: state.headline,
+    phase: state.phase,
+    headline: state.headline,
+    modelTitle: "Agent",
+    updatedAt: state.updatedAt,
+    deepLink: state.deepLink,
+  };
 }
 
 function relayEnvironmentClient(token: string) {
@@ -367,7 +373,7 @@ function resolveAgentAwarenessRelayPublishSnapshot(input: {
     projectId: input.thread.value.projectId,
     state: snoozedCompletion(input.thread.value, state)
       ? null
-      : sanitizeRelayAgentActivityState(state),
+      : minimizeRelayAgentActivityState(state),
     subagentWait: childDrivesWait ? input.pendingSubagentRequest : null,
     reason: "snapshot",
   };
