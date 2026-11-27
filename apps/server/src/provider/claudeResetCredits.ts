@@ -245,7 +245,7 @@ export const readClaudeOrganizationId = (
     ? readClaudeOauthAccount(accountConfigPath).pipe(
         Effect.map((account) => account?.organizationUuid?.trim() || undefined),
       )
-    : Effect.succeed(undefined);
+    : Effect.undefined;
 
 export const claudeAccountConfigPath = Effect.fn("claudeAccountConfigPath")(function* (
   configDir: string | undefined,
