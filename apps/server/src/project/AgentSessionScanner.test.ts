@@ -97,7 +97,7 @@ const layerScannerTest = (input: ScannerTestInput) =>
         Layer.provide(input.processRunner),
       )
   ).pipe(
-    Layer.provide(
+    Layer.provideMerge(
       Layer.mergeAll(
         ServerSettings.layerTest(
           {
@@ -1858,6 +1858,144 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
           ["Legacy prompt", "Legacy answer"],
         ]);
         expect(threads[0]).toMatchObject({ source: "pi", title: "Pi refactor" });
+      }),
+    );
+
+    it.effect("imports nothing from an agent turned off, removed or moved since the scan", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-claude-home-");
+        const codexHomePath = yield* makeTempDir("t3code-codex-home-");
+        const movedHome = yield* makeTempDir("t3code-codex-moved-");
+        const emptyCodexHome = yield* makeTempDir("t3code-codex-default-");
+        const codexWork = ProviderInstanceId.make("codex_work");
+        const claudeId = ProviderInstanceId.make("claudeAgent");
+        const workspace = yield* makeTempDir("t3code-workspace-");
+        const claudeFile = path.join(claudeHomePath, "projects", "-selected", "claude.jsonl");
+        const codexFile = path.join(
+          codexHomePath,
+          "sessions",
+          "2026",
+          "08",
+          "24",
+          "rollout-c.jsonl",
+        );
+        const claudeTranscript = (answer: string) =>
+          [
+            {
+              type: "user",
+              cwd: workspace,
+              sessionId: "claude-s",
+              message: { role: "user", content: "Fix it" },
+            },
+            {
+              type: "assistant",
+              sessionId: "claude-s",
+              message: { role: "assistant", content: [{ type: "text", text: answer }] },
+            },
+          ]
+            .map((record) =>
+              encodeTranscriptRecord({ ...record, timestamp: "2026-08-24T10:00:00.000Z" }),
+            )
+            .join("\n");
+        const codexTranscript = (answer: string) =>
+          [
+            { type: "session_meta", payload: { id: "codex-s", cwd: workspace } },
+            { type: "event_msg", payload: { type: "user_message", message: "Review it" } },
+            {
+              type: "response_item",
+              payload: {
+                type: "message",
+                role: "assistant",
+                content: [{ type: "output_text", text: answer }],
+              },
+            },
+          ]
+            .map((record) =>
+              encodeTranscriptRecord({ ...record, timestamp: "2026-08-24T10:00:00.000Z" }),
+            )
+            .join("\n");
+        const writeBoth = (answer: string) =>
+          Effect.all([
+            writeTranscript({
+              filePath: claudeFile,
+              contents: claudeTranscript(answer),
+              mtimeMs: nowMs - 60_000,
+            }),
+            writeTranscript({
+              filePath: codexFile,
+              contents: codexTranscript(answer),
+              mtimeMs: nowMs - 60_000,
+            }),
+          ]);
+
+        const importAfter = (
+          change: (
+            instances: ContractServerSettings["providerInstances"],
+          ) => ContractServerSettings["providerInstances"],
+        ) =>
+          Effect.gen(function* () {
+            const scanner = yield* AgentSessionScanner.AgentSessionScanner;
+            const settings = yield* ServerSettings.ServerSettingsService;
+            yield* writeBoth("Before the change");
+            yield* scanner.scan;
+            const current = yield* settings.getSettings;
+            yield* settings.updateSettings({
+              providerInstances: change(current.providerInstances),
+            });
+            yield* writeBoth("Written after the change");
+            const outcomes = yield* scanner.recentThreads(workspace).pipe(
+              Stream.runCollect,
+              Effect.map((all) => Array.from(all)),
+            );
+            return outcomes
+              .flatMap((outcome) =>
+                outcome._tag === "Importable"
+                  ? [[outcome.thread.source, outcome.thread.messages.at(-1)?.text]]
+                  : [[outcome._tag]],
+              )
+              .toSorted((left, right) => String(left[0]).localeCompare(String(right[0])));
+          }).pipe(
+            Effect.provide(
+              layerScannerTest({
+                claudeHomePath,
+                codexHomePath: emptyCodexHome,
+                providerInstances: {
+                  [codexWork]: {
+                    driver: ProviderDriverKind.make("codex"),
+                    config: { homePath: codexHomePath },
+                  },
+                },
+              }),
+            ),
+          );
+
+        // Control: with nothing changed, both sessions import with the newest message.
+        expect(yield* importAfter((instances) => instances)).toEqual([
+          ["claudeAgent", "Written after the change"],
+          ["codex", "Written after the change"],
+        ]);
+        // Claude turned off and the Codex account removed: neither is read again.
+        expect(
+          yield* importAfter((instances) =>
+            Object.fromEntries(
+              Object.entries(instances).flatMap(([id, instance]) =>
+                id === codexWork
+                  ? []
+                  : [[id, id === claudeId ? { ...instance, enabled: false } : instance]],
+              ),
+            ),
+          ),
+        ).toEqual([]);
+        // The Codex account moved to another home: the old home's session is not read.
+        expect(
+          yield* importAfter((instances) => ({
+            ...instances,
+            [codexWork]: { ...instances[codexWork]!, config: { homePath: movedHome } },
+          })),
+        ).toEqual([["claudeAgent", "Written after the change"]]);
       }),
     );
 

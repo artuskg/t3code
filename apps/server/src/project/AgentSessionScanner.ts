@@ -1857,6 +1857,90 @@ export const make = Effect.gen(function* () {
     }));
   });
 
+  // The session homes the scan may read for `source` under `settings`: instances that are on, of
+  // a driver the managed policy allows, one per distinct home.
+  const readableHomes = Effect.fn("AgentSessionScanner.readableHomes")(function* (
+    settings: Effect.Success<typeof serverSettings.getSettings>,
+    source: AgentSessionSource,
+  ) {
+    const homes: Array<{ homePath: string; providerInstanceId: ProviderInstanceId }> = [];
+    // Privacy fork: a driver the managed policy leaves out is never read, like one that is off.
+    if (!isManagedDriverAllowed(serverSettings.managedPolicy, ProviderDriverKind.make(source))) {
+      return homes;
+    }
+    const instances: Array<{
+      readonly instanceId: ProviderInstanceId;
+      readonly config: ProviderInstanceConfig;
+    }> = Object.entries(settings.providerInstances)
+      .filter(
+        ([, instance]) => instance.driver === source && resolveProviderInstanceEnabled(instance),
+      )
+      .map(([instanceId, config]) => ({
+        instanceId: ProviderInstanceId.make(instanceId),
+        config,
+      }));
+    if (!Object.hasOwn(settings.providerInstances, source)) {
+      const defaultInstance = {
+        instanceId: ProviderInstanceId.make(source),
+        config: { driver: ProviderDriverKind.make(source) },
+      };
+      if (resolveProviderInstanceEnabled(defaultInstance.config)) {
+        instances.push(defaultInstance);
+      }
+    }
+
+    instances.sort((left, right) => {
+      const leftDefault = left.instanceId === source ? 0 : 1;
+      const rightDefault = right.instanceId === source ? 0 : 1;
+      return leftDefault - rightDefault;
+    });
+    const seenHomes = new Set<string>();
+    for (const { instanceId, config: instance } of instances) {
+      const environmentHome = (name: "CLAUDE_CONFIG_DIR" | "CODEX_HOME") => {
+        const configured = instance.environment?.findLast(
+          (variable) => variable.name === name,
+        )?.value;
+        return typeof configured === "string" ? configured : hostEnvironment[name];
+      };
+
+      let homePath: string;
+      if (source === "pi") {
+        const environment = yield* mergeProviderInstanceEnvironment(
+          instance.environment,
+          hostEnvironment,
+        ).pipe(Effect.provideService(HostProcess.HomeDirectory, homeDir));
+        homePath = resolvePiSessionsDir(environment, piHome(environment, homeDir, platform), path);
+      } else if (source === "claudeAgent") {
+        const config = decodeClaudeSettings(instance.config ?? {});
+        if (Option.isNone(config)) continue;
+        homePath = resolveClaudeConfigDir(
+          config.value.homePath,
+          environmentHome("CLAUDE_CONFIG_DIR"),
+        );
+      } else {
+        const config = decodeCodexSettings(instance.config ?? {});
+        if (Option.isNone(config)) continue;
+        const codexHome = environmentHome("CODEX_HOME");
+        const codexSettings =
+          config.value.homePath.trim().length === 0 &&
+          config.value.shadowHomePath.trim().length === 0 &&
+          codexHome?.trim()
+            ? { ...config.value, homePath: codexHome }
+            : config.value;
+        const layout = yield* resolveCodexHomeLayout(codexSettings).pipe(
+          Effect.provideService(Path.Path, path),
+        );
+        homePath = layout.sharedHomePath;
+      }
+
+      const homeKey = `${source}\0${yield* directoryIdentity(homePath)}`;
+      if (seenHomes.has(homeKey)) continue;
+      seenHomes.add(homeKey);
+      homes.push({ homePath, providerInstanceId: instanceId });
+    }
+    return homes;
+  });
+
   const collectCandidates = Effect.fn("AgentSessionScanner.collectCandidates")(function* () {
     const settings = yield* serverSettings.getSettings.pipe(
       Effect.mapError((cause) => new AgentSessionScanError({ operation: "read-settings", cause })),
@@ -1883,85 +1967,7 @@ export const make = Effect.gen(function* () {
     let metadataTruncated = false;
 
     for (const source of ["claudeAgent", "codex", "pi"] as const) {
-      // Privacy fork: a driver the managed policy leaves out is never read, like one that is off.
-      if (!isManagedDriverAllowed(serverSettings.managedPolicy, ProviderDriverKind.make(source))) {
-        continue;
-      }
-      const instances: Array<{
-        readonly instanceId: ProviderInstanceId;
-        readonly config: ProviderInstanceConfig;
-      }> = Object.entries(settings.providerInstances)
-        .filter(
-          ([, instance]) => instance.driver === source && resolveProviderInstanceEnabled(instance),
-        )
-        .map(([instanceId, config]) => ({
-          instanceId: ProviderInstanceId.make(instanceId),
-          config,
-        }));
-      if (!Object.hasOwn(settings.providerInstances, source)) {
-        const defaultInstance = {
-          instanceId: ProviderInstanceId.make(source),
-          config: { driver: ProviderDriverKind.make(source) },
-        };
-        if (resolveProviderInstanceEnabled(defaultInstance.config)) {
-          instances.push(defaultInstance);
-        }
-      }
-
-      instances.sort((left, right) => {
-        const leftDefault = left.instanceId === source ? 0 : 1;
-        const rightDefault = right.instanceId === source ? 0 : 1;
-        return leftDefault - rightDefault;
-      });
-      const homes: Array<{ homePath: string; providerInstanceId: ProviderInstanceId }> = [];
-      const seenHomes = new Set<string>();
-      for (const { instanceId, config: instance } of instances) {
-        const environmentHome = (name: "CLAUDE_CONFIG_DIR" | "CODEX_HOME") => {
-          const configured = instance.environment?.findLast(
-            (variable) => variable.name === name,
-          )?.value;
-          return typeof configured === "string" ? configured : hostEnvironment[name];
-        };
-
-        let homePath: string;
-        if (source === "pi") {
-          const environment = yield* mergeProviderInstanceEnvironment(
-            instance.environment,
-            hostEnvironment,
-          ).pipe(Effect.provideService(HostProcess.HomeDirectory, homeDir));
-          homePath = resolvePiSessionsDir(
-            environment,
-            piHome(environment, homeDir, platform),
-            path,
-          );
-        } else if (source === "claudeAgent") {
-          const config = decodeClaudeSettings(instance.config ?? {});
-          if (Option.isNone(config)) continue;
-          homePath = resolveClaudeConfigDir(
-            config.value.homePath,
-            environmentHome("CLAUDE_CONFIG_DIR"),
-          );
-        } else {
-          const config = decodeCodexSettings(instance.config ?? {});
-          if (Option.isNone(config)) continue;
-          const codexHome = environmentHome("CODEX_HOME");
-          const codexSettings =
-            config.value.homePath.trim().length === 0 &&
-            config.value.shadowHomePath.trim().length === 0 &&
-            codexHome?.trim()
-              ? { ...config.value, homePath: codexHome }
-              : config.value;
-          const layout = yield* resolveCodexHomeLayout(codexSettings).pipe(
-            Effect.provideService(Path.Path, path),
-          );
-          homePath = layout.sharedHomePath;
-        }
-
-        const homeKey = `${source}\0${yield* directoryIdentity(homePath)}`;
-        if (seenHomes.has(homeKey)) continue;
-        seenHomes.add(homeKey);
-        homes.push({ homePath, providerInstanceId: instanceId });
-      }
+      const homes = yield* readableHomes(settings, source);
 
       const transcriptCandidates: Array<TranscriptCandidate> = [];
       const discover =
@@ -2293,9 +2299,35 @@ export const make = Effect.gen(function* () {
       }
       return prefixes.flat();
     });
+    // Privacy fork: the candidates may come from an earlier scan, so each one is checked against
+    // the current settings before any of its files is opened. An agent turned off, left out by
+    // the policy, removed or moved since then is not read.
+    let readableFor: { readonly instances: object; readonly keys: ReadonlySet<string> } | null =
+      null;
+    const readableKey = (source: string, instanceId: string, homePath: string) =>
+      `${source}\0${instanceId}\0${homePath}`;
+    const stillReadable = Effect.fn("AgentSessionScanner.stillReadable")(function* (
+      candidate: RawCandidate,
+    ) {
+      const settings = yield* serverSettings.getSettings.pipe(Effect.option);
+      if (Option.isNone(settings)) return false;
+      if (readableFor?.instances !== settings.value.providerInstances) {
+        const keys = new Set<string>();
+        for (const source of ["claudeAgent", "codex", "pi"] as const) {
+          for (const home of yield* readableHomes(settings.value, source)) {
+            keys.add(readableKey(source, home.providerInstanceId, home.homePath));
+          }
+        }
+        readableFor = { instances: settings.value.providerInstances, keys };
+      }
+      return readableFor.keys.has(
+        readableKey(candidate.source, candidate.providerInstanceId, candidate.homePath),
+      );
+    });
     return Stream.fromIteratorSucceed(eligibleTranscripts.values(), 1).pipe(
       Stream.mapEffect(({ candidate, transcript }) =>
         Effect.gen(function* () {
+          if (!(yield* stillReadable(candidate))) return Option.none<AgentSessionRecentThread>();
           const completed = completedByFile.get(
             `${candidate.providerInstanceId}\0${transcript.filePath}`,
           );
