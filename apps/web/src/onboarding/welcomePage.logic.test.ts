@@ -16,6 +16,7 @@ import {
   groupWelcomeAgents,
   turnedOnInstance,
   welcomeImportSources,
+  welcomeImportSourcesLabel,
   welcomeOffersPhone,
 } from "./welcomePage.logic";
 
@@ -312,7 +313,36 @@ describe("welcomeImportSources", () => {
     ).toEqual(["codex", "pi"]);
   });
 
-  it("names every source until the settings are known", () => {
-    expect(welcomeImportSources(undefined)).toEqual(["claudeAgent", "codex", "pi"]);
+  it("names no source until the settings are known", () => {
+    expect(welcomeImportSources(undefined)).toBeNull();
+    expect(welcomeImportSources(null)).toBeNull();
+  });
+});
+
+describe("welcomeImportSourcesLabel", () => {
+  const off = (driver: string) => ({ driver: ProviderDriverKind.make(driver), enabled: false });
+
+  it("stays generic while the settings are unknown or no agent is read", () => {
+    expect(welcomeImportSourcesLabel(welcomeImportSources(null), "en")).toBeNull();
+    expect(
+      welcomeImportSourcesLabel(
+        welcomeImportSources({
+          providerInstances: {
+            [ProviderInstanceId.make("claudeAgent")]: off("claudeAgent"),
+            [ProviderInstanceId.make("codex")]: off("codex"),
+          },
+        }),
+        "en",
+      ),
+    ).toBeNull();
+  });
+
+  it("follows a settings change made while a scan runs", () => {
+    const before = welcomeImportSources({ providerInstances: {} });
+    const after = welcomeImportSources({
+      providerInstances: { [ProviderInstanceId.make("codex")]: off("codex") },
+    });
+    expect(welcomeImportSourcesLabel(before, "en")).toBe("Claude Code and Codex");
+    expect(welcomeImportSourcesLabel(after, "en")).toBe("Claude Code");
   });
 });

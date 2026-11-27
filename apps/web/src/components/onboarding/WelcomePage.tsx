@@ -74,7 +74,9 @@ import {
   isBrokenVersion,
   turnedOnInstance,
   welcomeAgentState,
+  IMPORT_SOURCE_NAMES,
   welcomeImportSources,
+  welcomeImportSourcesLabel,
   welcomeOffersPhone,
 } from "../../onboarding/welcomePage.logic";
 import {
@@ -811,8 +813,9 @@ function ProjectsSection({
   const gt = useGT();
   const m = useMessages();
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
-  const importSourcesLabel = useImportSourcesLabel(
+  const importSourcesLabel = welcomeImportSourcesLabel(
     welcomeImportSources(serverConfig?.settings, serverConfig?.managedPolicy),
+    useLocale(),
   );
   const [reviewing, setReviewing] = useState(false);
   const {
@@ -830,9 +833,13 @@ function ProjectsSection({
     return (
       <WelcomeSection title={gt("Projects")}>
         <p className="text-sm leading-10 text-muted-foreground">
-          <T>
-            Looking for projects in your <Var>{importSourcesLabel}</Var> history…
-          </T>
+          {importSourcesLabel === null ? (
+            <T>Looking for projects in your agent history…</T>
+          ) : (
+            <T>
+              Looking for projects in your <Var>{importSourcesLabel}</Var> history…
+            </T>
+          )}
         </p>
       </WelcomeSection>
     );
@@ -899,9 +906,13 @@ function ProjectsSection({
                 : gt("Import projects and their threads")}
             </span>
             <span className="block text-xs text-muted-foreground">
-              <T>
-                From your <Var>{importSourcesLabel}</Var> history
-              </T>
+              {importSourcesLabel === null ? (
+                <T>From your agent history</T>
+              ) : (
+                <T>
+                  From your <Var>{importSourcesLabel}</Var> history
+                </T>
+              )}
             </span>
           </span>
         </label>
@@ -1951,18 +1962,6 @@ function ImportCandidateRow({
         lastActiveAt={candidate.lastActiveAt}
       />
     </label>
-  );
-}
-
-const IMPORT_SOURCE_NAMES: Record<AgentSessionSource, string> = {
-  claudeAgent: "Claude Code",
-  codex: "Codex",
-  pi: "Pi",
-};
-// Names only the agents the scan reads, so an agent that is off (Pi by default) is not named.
-function useImportSourcesLabel(sources: ReadonlyArray<AgentSessionSource>) {
-  return new Intl.ListFormat(useLocale(), { type: "conjunction" }).format(
-    sources.map((source) => IMPORT_SOURCE_NAMES[source]),
   );
 }
 

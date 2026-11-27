@@ -184,13 +184,13 @@ export function codexCardProvider(input: {
 
 /**
  * Agents whose history the project scan reads: those that are on and that the managed policy
- * allows, as the server decides.
+ * allows, as the server decides. Null until the settings are known.
  */
 export function welcomeImportSources(
   settings: Pick<ServerSettings, "providerInstances"> | null | undefined,
   managedPolicy?: ManagedPolicySummary | undefined,
-): ReadonlyArray<AgentSessionSource> {
-  if (!settings) return AgentSessionSource.literals;
+): ReadonlyArray<AgentSessionSource> | null {
+  if (!settings) return null;
   const instances = settings.providerInstances;
   return AgentSessionSource.literals.filter(
     (source) =>
@@ -200,5 +200,25 @@ export function welcomeImportSources(
       ) ||
         (!Object.hasOwn(instances, source) &&
           resolveProviderInstanceEnabled({ driver: ProviderDriverKind.make(source) }))),
+  );
+}
+
+export const IMPORT_SOURCE_NAMES: Record<AgentSessionSource, string> = {
+  claudeAgent: "Claude Code",
+  codex: "Codex",
+  pi: "Pi",
+};
+
+/**
+ * The agents the Welcome copy names, as a list in `locale`; null while they are unknown or none,
+ * so the copy stays generic instead of naming an agent that is off or an empty list.
+ */
+export function welcomeImportSourcesLabel(
+  sources: ReadonlyArray<AgentSessionSource> | null,
+  locale: string,
+): string | null {
+  if (sources === null || sources.length === 0) return null;
+  return new Intl.ListFormat(locale, { type: "conjunction" }).format(
+    sources.map((source) => IMPORT_SOURCE_NAMES[source]),
   );
 }
