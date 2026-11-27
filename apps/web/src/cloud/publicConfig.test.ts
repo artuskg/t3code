@@ -1,6 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { hasCloudPublicConfig } from "./publicConfig.ts";
+import {
+  canOptInToDesktopConnect,
+  DESKTOP_CONNECT_OPT_IN_KEY,
+  hasCloudPublicConfig,
+} from "./publicConfig.ts";
+
+function memoryStorage(entries: Record<string, string> = {}) {
+  const values = new Map(Object.entries(entries));
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => void values.set(key, value),
+    removeItem: (key: string) => void values.delete(key),
+  };
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -69,10 +82,45 @@ describe("hasCloudPublicConfig", () => {
       expect(hasCloudPublicConfig()).toBe(expected);
     });
 
-    it("keeps production keys available in the Electron auth shell", () => {
-      vi.stubGlobal("window", { location: new URL("file:///app/index.html"), desktopBridge: {} });
+    it("keeps Clerk unmounted in Electron until the user opts in to Connect", () => {
+      vi.stubGlobal("window", {
+        location: new URL("t3code://app/"),
+        desktopBridge: {},
+        localStorage: memoryStorage(),
+      });
+
+      expect(hasCloudPublicConfig()).toBe(false);
+      expect(canOptInToDesktopConnect()).toBe(true);
+    });
+
+    it("treats unreadable storage in Electron as not opted in", () => {
+      vi.stubGlobal("window", { location: new URL("t3code://app/"), desktopBridge: {} });
+
+      expect(hasCloudPublicConfig()).toBe(false);
+    });
+
+    it("keeps production keys available in the Electron auth shell after the opt-in", () => {
+      vi.stubGlobal("window", {
+        location: new URL("t3code://app/"),
+        desktopBridge: {},
+        localStorage: memoryStorage({ [DESKTOP_CONNECT_OPT_IN_KEY]: "1" }),
+      });
 
       expect(hasCloudPublicConfig()).toBe(true);
+      expect(canOptInToDesktopConnect()).toBe(false);
+    });
+
+    it("offers no desktop opt-in in a browser or without Connect stamps", () => {
+      vi.stubGlobal("window", { location: new URL("https://example.com") });
+      expect(canOptInToDesktopConnect()).toBe(false);
+
+      vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", "");
+      vi.stubGlobal("window", {
+        location: new URL("t3code://app/"),
+        desktopBridge: {},
+        localStorage: memoryStorage(),
+      });
+      expect(canOptInToDesktopConnect()).toBe(false);
     });
   });
 });

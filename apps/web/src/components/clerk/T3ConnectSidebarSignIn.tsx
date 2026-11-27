@@ -1,14 +1,20 @@
 import { UserButton, useAuth } from "@clerk/react";
 import { T, useMessages } from "gt-react";
-import { LogInIcon, RotateCwIcon } from "lucide-react";
+import { CloudIcon, CloudOffIcon, LogInIcon, RotateCwIcon } from "lucide-react";
 
-import { hasCloudPublicConfig } from "../../cloud/publicConfig";
+import {
+  canOptInToDesktopConnect,
+  hasCloudPublicConfig,
+  isDesktopConnectOptedIn,
+  setDesktopConnectOptIn,
+} from "../../cloud/publicConfig";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { retryClerkLoad, useClerkLoadFailed } from "./clerkLoadFailure";
 import { T3_CONNECT_ACCOUNT_PAGES } from "./T3ConnectAccountPages";
 import { useT3ConnectAuthPrompt } from "./useT3ConnectAuthPrompt";
 
 export function T3ConnectSidebarSignIn() {
+  if (canOptInToDesktopConnect()) return <DesktopConnectOptIn />;
   if (!hasCloudPublicConfig()) return null;
 
   return <ConfiguredT3ConnectSidebarSignIn />;
@@ -78,6 +84,32 @@ function ConfiguredT3ConnectSidebarSignIn() {
           <LogInIcon />
           <span>
             <T>Sign in to T3 Connect</T>
+          </span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      {isDesktopConnectOptedIn() ? (
+        <SidebarMenuItem>
+          <SidebarMenuButton onClick={() => setDesktopConnectOptIn(false)}>
+            <CloudOffIcon />
+            <span>
+              <T>Turn off T3 Connect on this device</T>
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ) : null}
+    </SidebarMenu>
+  );
+}
+
+/** Privacy build: nothing contacts Clerk until this is clicked. */
+function DesktopConnectOptIn() {
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton onClick={() => setDesktopConnectOptIn(true)}>
+          <CloudIcon />
+          <span>
+            <T>Set up T3 Connect</T>
           </span>
         </SidebarMenuButton>
       </SidebarMenuItem>

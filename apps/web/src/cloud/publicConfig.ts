@@ -94,18 +94,53 @@ export function resolveRelayTracingConfig() {
     : null;
 }
 
+/** Privacy build: the desktop mounts Clerk only after the user chooses T3 Connect on this device. */
+export const DESKTOP_CONNECT_OPT_IN_KEY = "t3code:privacy:desktop-connect";
+
+function isDesktopRenderer(): boolean {
+  return typeof window !== "undefined" && window.desktopBridge !== undefined;
+}
+
+export function isDesktopConnectOptedIn(): boolean {
+  try {
+    return window.localStorage.getItem(DESKTOP_CONNECT_OPT_IN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function hasCloudBuildConfig(): boolean {
+  const config = resolveCloudPublicConfig();
+  return Boolean(config.clerkPublishableKey && config.clerkJwtTemplate && config.relayUrl);
+}
+
+/** True in a desktop build with Connect stamps where the user has not chosen Connect yet. */
+export function canOptInToDesktopConnect(): boolean {
+  return isDesktopRenderer() && hasCloudBuildConfig() && !isDesktopConnectOptedIn();
+}
+
+/** Records the choice and reloads, so Clerk mounts from a clean start (as `retryClerkLoad` does). */
+export function setDesktopConnectOptIn(enabled: boolean): void {
+  try {
+    if (enabled) window.localStorage.setItem(DESKTOP_CONNECT_OPT_IN_KEY, "1");
+    else window.localStorage.removeItem(DESKTOP_CONNECT_OPT_IN_KEY);
+  } catch {
+    return;
+  }
+  window.location.reload();
+}
+
 export function hasCloudPublicConfig(): boolean {
   const config = resolveCloudPublicConfig();
   if (!config.clerkPublishableKey || !config.clerkJwtTemplate || !config.relayUrl) {
     return false;
   }
 
-  // Electron has its own auth runtime; development keys also support private browser origins.
-  if (
-    typeof window === "undefined" ||
-    window.desktopBridge !== undefined ||
-    !config.clerkPublishableKey.startsWith("pk_live_")
-  ) {
+  // Electron has its own auth runtime, mounted only after the user opts in to Connect.
+  if (isDesktopRenderer()) return isDesktopConnectOptedIn();
+
+  // Development keys also support private browser origins.
+  if (typeof window === "undefined" || !config.clerkPublishableKey.startsWith("pk_live_")) {
     return true;
   }
 

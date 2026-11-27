@@ -12972,5 +12972,7 @@
   "201490988858b511": "retirada por {by}",
   "99451a5d2d40440f": "Retirada por {by}.",
   "3ee30a50b70fffab": "Retirada por {by}: {reason}",
-  "92e129bf413a1220": "retirada"
+  "92e129bf413a1220": "retirada",
+  "ac796f2bbd3c6d13": "Desactivar T3 Connect en este dispositivo",
+  "abdf8ff7dfe752ad": "Configurar T3 Connect"
 }
