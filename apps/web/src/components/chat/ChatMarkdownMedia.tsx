@@ -203,8 +203,11 @@ export function ClickToLoadRemoteMedia(props: {
     props.src,
     typeof window === "undefined" ? undefined : window.location.origin,
   );
-  const [loaded, setLoaded] = useState(() => host === null || loadedRemoteMediaUrls.has(props.src));
-  if (loaded || host === null) return props.children;
+  // Consent belongs to one URL: a source replaced in place needs its own click.
+  const [clickedSrc, setClickedSrc] = useState<string | null>(null);
+  if (host === null || clickedSrc === props.src || loadedRemoteMediaUrls.has(props.src)) {
+    return props.children;
+  }
   const label =
     props.kind === "video"
       ? gt("Load video from {host}", { host })
@@ -221,7 +224,7 @@ export function ClickToLoadRemoteMedia(props: {
       )}
       onClick={() => {
         loadedRemoteMediaUrls.add(props.src);
-        setLoaded(true);
+        setClickedSrc(props.src);
       }}
     >
       {label}
@@ -524,8 +527,8 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
     downloadable: fallbackSrc === undefined,
   });
 
-  if (props.kind === "video") {
-    return (
+  const media =
+    props.kind === "video" ? (
       <ChatMarkdownVideo
         src={src}
         sourceFailed={unavailable}
@@ -539,27 +542,36 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
         onRetry={missingFileAccess ? undefined : refreshAssetUrl}
         actionsSource={actionsSource}
       />
+    ) : (
+      <ChatMarkdownImage
+        key={JSON.stringify([props.environmentId, props.resource, props.srcFragment])}
+        src={src}
+        sourceFailed={unavailable}
+        unavailableDetail={unavailableDetail}
+        alt={props.alt}
+        copyMarkdown={props.copyMarkdown}
+        standalone={props.standalone ?? true}
+        className={cn(
+          props.framed === false ? undefined : CHAT_MARKDOWN_WORKSPACE_IMAGE_CLASS_NAME,
+          props.className,
+        )}
+        style={style}
+        imageProps={props.imageProps}
+        actionsSource={actionsSource}
+        originalUrl={props.originalUrl}
+        onImageExpand={props.onImageExpand}
+      />
     );
-  }
-
-  return (
-    <ChatMarkdownImage
-      key={JSON.stringify([props.environmentId, props.resource, props.srcFragment])}
-      src={src}
-      sourceFailed={unavailable}
-      unavailableDetail={unavailableDetail}
-      alt={props.alt}
+  // A failed signing falls back to the forge's own URL, which is a third-party fetch.
+  return fallbackSrc === undefined ? (
+    media
+  ) : (
+    <ClickToLoadRemoteMedia
+      src={fallbackSrc}
+      kind={props.kind ?? "image"}
       copyMarkdown={props.copyMarkdown}
-      standalone={props.standalone ?? true}
-      className={cn(
-        props.framed === false ? undefined : CHAT_MARKDOWN_WORKSPACE_IMAGE_CLASS_NAME,
-        props.className,
-      )}
-      style={style}
-      imageProps={props.imageProps}
-      actionsSource={actionsSource}
-      originalUrl={props.originalUrl}
-      onImageExpand={props.onImageExpand}
-    />
+    >
+      {media}
+    </ClickToLoadRemoteMedia>
   );
 });

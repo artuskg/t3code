@@ -16,6 +16,7 @@ import { cn } from "~/lib/utils";
 import { PULL_REQUESTS_PANEL_REF } from "~/rightPanelStore";
 
 import ChatMarkdown from "../ChatMarkdown";
+import { ClickToLoadRemoteMedia } from "../chat/ChatMarkdownMedia";
 import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
 import { splitPullRequestBody, type PullRequestBodySegment } from "./pullRequestMarkdown.logic";
 
@@ -56,7 +57,7 @@ function PullRequestHostVideo({
   const refreshAssetUrl = useAssetUrlRefresh(environmentId, resource);
   const src =
     assetUrl._tag === "Success" ? assetUrl.url : assetUrl._tag === "Failure" ? fetchUrl : null;
-  return (
+  const player = (
     <MediaVideoPlayer
       src={src === null ? null : src + markdownImageSourceFragment(url)}
       originalUrl={url}
@@ -65,6 +66,13 @@ function PullRequestHostVideo({
       videoClassName="rounded-lg border border-border/60"
       onRetry={refreshAssetUrl}
     />
+  );
+  return assetUrl._tag === "Failure" ? (
+    <ClickToLoadRemoteMedia src={fetchUrl} kind="video">
+      {player}
+    </ClickToLoadRemoteMedia>
+  ) : (
+    player
   );
 }
 
@@ -160,14 +168,15 @@ function PullRequestBodySegmentView({
   }
   if (segment.media === "video") {
     return (
-      <MediaVideoPlayer
-        key={`${segment.id}:${segment.url}`}
-        src={segment.url}
-        originalUrl={segment.url}
-        label={gt("Pull request video")}
-        className="w-full"
-        videoClassName="rounded-lg border border-border/60"
-      />
+      <ClickToLoadRemoteMedia key={`${segment.id}:${segment.url}`} src={segment.url} kind="video">
+        <MediaVideoPlayer
+          src={segment.url}
+          originalUrl={segment.url}
+          label={gt("Pull request video")}
+          className="w-full"
+          videoClassName="rounded-lg border border-border/60"
+        />
+      </ClickToLoadRemoteMedia>
     );
   }
   return (

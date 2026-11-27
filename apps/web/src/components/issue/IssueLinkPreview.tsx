@@ -99,7 +99,7 @@ function IssuePreviewCardBody({ detail }: { detail: IssueDetail }) {
         {detail.title}
       </p>
       <div className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <PullRequestActorAvatar actor={author} className="size-4" />
+        <PullRequestActorAvatar actor={author} className="size-4" initialsOnly />
         <span className="min-w-0 truncate">{authorLabel}</span>
         <span aria-hidden>·</span>
         <span className="shrink-0">

@@ -461,12 +461,15 @@ export function PullRequestReviewOutcomeBadge({
 export function PullRequestActorAvatar({
   actor,
   className,
+  initialsOnly = false,
 }: {
   actor: PullRequestActor | null;
   className?: string;
+  /** Hover cards open without a click, so they never fetch the forge's avatar image. */
+  initialsOnly?: boolean;
 }) {
   const login = actor?.login ?? "ghost";
-  const avatarUrl = actor?.avatarUrl ?? null;
+  const avatarUrl = initialsOnly ? null : (actor?.avatarUrl ?? null);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   return avatarUrl === null || failedAvatarUrl === avatarUrl ? (
     <span

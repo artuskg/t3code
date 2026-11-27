@@ -169,7 +169,7 @@ export function PullRequestLinkPreview({
                 )}
                 {card.author === undefined || subject !== null ? null : (
                   <div className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                    <PullRequestActorAvatar actor={card.author} className="size-4" />
+                    <PullRequestActorAvatar actor={card.author} className="size-4" initialsOnly />
                     <span className="min-w-0 truncate">{authorLabel}</span>
                     {preview === null ? null : (
                       <>
@@ -203,7 +203,7 @@ function LinkedComment({
   return (
     <div className="mt-2 min-w-0">
       <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <PullRequestActorAvatar actor={subject.author} className="size-4" />
+        <PullRequestActorAvatar actor={subject.author} className="size-4" initialsOnly />
         <span className="min-w-0 truncate font-medium text-foreground">
           {actorLabel(subject.author)}
         </span>
@@ -242,7 +242,7 @@ function LinkedCommit({
         {author === undefined ? null : (
           <>
             <span aria-hidden>·</span>
-            <PullRequestActorAvatar actor={author} className="size-4" />
+            <PullRequestActorAvatar actor={author} className="size-4" initialsOnly />
             <span className="min-w-0 truncate">{actorLabel(author)}</span>
           </>
         )}
