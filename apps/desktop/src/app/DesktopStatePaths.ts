@@ -15,6 +15,25 @@ export function isPrivacyIdentityBuild(): boolean {
   );
 }
 
+/** The privacy app reads only its own variable, so an inherited T3CODE_HOME never reaches it. */
+export const desktopHomeEnvName = (): "T3CODE_PRIVACY_HOME" | "T3CODE_HOME" =>
+  isPrivacyIdentityBuild() ? "T3CODE_PRIVACY_HOME" : "T3CODE_HOME";
+
+/**
+ * Why the privacy app must not start with this home, or null. It refuses the stock default
+ * `~/.t3`, which the stock app beside it owns.
+ */
+export function privacyHomeRefusal(input: {
+  readonly homeDirectory: string;
+  readonly baseDir: string;
+  readonly resolvePath: (...segments: string[]) => string;
+}): string | null {
+  if (!isPrivacyIdentityBuild()) return null;
+  const stockHome = input.resolvePath(input.homeDirectory, ".t3");
+  if (input.resolvePath(input.baseDir) !== stockHome) return null;
+  return `T3 Code (Privacy) will not use ${stockHome}, the stock T3 Code home. Set T3CODE_PRIVACY_HOME to another folder, or unset it to use ~/.t3-privacy.`;
+}
+
 function normalizeConfiguredBaseDir(t3Home: Option.Option<string>): Option.Option<string> {
   if (Option.isNone(t3Home)) {
     return Option.none();

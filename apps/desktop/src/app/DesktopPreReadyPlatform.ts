@@ -15,6 +15,11 @@ import * as DesktopEarlyElectronStartup from "./DesktopEarlyElectronStartup.ts";
 import { trimmedString } from "./DesktopConfig.ts";
 import { resolveDesktopAppBranding } from "./DesktopEnvironment.ts";
 import {
+  desktopHomeEnvName,
+  privacyHomeRefusal,
+  resolveDesktopBaseDir,
+} from "./DesktopStatePaths.ts";
+import {
   renderUrlHandlerDesktopEntry,
   replacedVersionedAppImagePath,
 } from "./DesktopLinuxUrlHandler.ts";
@@ -46,6 +51,23 @@ export const resolveEarlyLinuxElectronOptionsFromProcess = (
     joinPath: NodePath.posix.join,
     readFileString: (path) => NodeFS.readFileSync(path, "utf8"),
   });
+
+/** Exits before any layer opens state when the privacy app's home is the stock `~/.t3`. */
+export function refusePrivacyStockHome(homeDirectory: string): void {
+  const refusal = privacyHomeRefusal({
+    homeDirectory,
+    baseDir: resolveDesktopBaseDir({
+      homeDirectory,
+      joinPath: NodePath.join,
+      t3Home: Option.fromUndefinedOr(process.env[desktopHomeEnvName()]),
+    }),
+    resolvePath: NodePath.resolve,
+  });
+  if (refusal === null) return;
+  // showErrorBox is safe before ready; process.exit stops main synchronously, unlike app.exit.
+  Electron.dialog.showErrorBox("T3 Code (Privacy) cannot start", refusal);
+  process.exit(1);
+}
 
 export class DesktopPreReadyElectronOptions extends Context.Service<
   DesktopPreReadyElectronOptions,

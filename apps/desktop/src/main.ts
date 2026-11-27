@@ -91,6 +91,8 @@ if (process.argv.includes("--version")) {
   Electron.app.exit(0);
 }
 
+DesktopPreReadyPlatform.refusePrivacyStockHome(NodeOS.homedir());
+
 const layerDesktopEnvironment = Layer.unwrap(
   Effect.gen(function* () {
     const metadata = yield* Effect.service(ElectronApp.ElectronApp).pipe(
