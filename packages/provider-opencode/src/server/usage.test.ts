@@ -719,6 +719,127 @@ describe("readOpenCodeUsage", () => {
 import * as NodeSqlite from "node:sqlite";
 
 describe("openCodeUsageReader", () => {
+  const SIGN_IN_READS = { T3CODE_READ_AGENT_SIGN_INS: "1" };
+
+  // A root whose database holds one message (11 output tokens) and whose legacy JSON store
+  // holds another (7 output tokens).
+  const writeRoot = Effect.fn(function* (root: string, prefix: string) {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fileSystem.makeDirectory(path.join(root, "storage", "message", "ses"), {
+      recursive: true,
+    });
+    yield* fileSystem.writeFileString(
+      path.join(root, "storage", "message", "ses", `${prefix}-json.json`),
+      JSON.stringify({
+        role: "assistant",
+        modelID: "m",
+        time: { created: 5 },
+        tokens: { output: 7 },
+      }),
+    );
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* openDatabase(path.join(root, "opencode.db"));
+        yield* db.unsafe(
+          "CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT)",
+        );
+        yield* db.unsafe(
+          "INSERT INTO message(rowid, id, session_id, time_created, time_updated, data) VALUES (1, ?, 's', 5, 5, ?)",
+          [`${prefix}-db`, JSON.stringify({ modelID: "m", tokens: { output: 11 } })],
+        );
+      }),
+    );
+  });
+
+  const scanRoots = (
+    home: string,
+    instances: ReadonlyArray<{ readonly id: string; readonly environment: NodeJS.ProcessEnv }>,
+  ) =>
+    Effect.gen(function* () {
+      if (openCodeUsageReader.kind !== "scan") throw new Error("Expected an OpenCode scan reader");
+      const sources = yield* openCodeUsageReader.scan({
+        instances: instances.map(({ id, environment }) => ({
+          instanceId: ProviderInstanceId.make(id),
+          config: undefined,
+          environment,
+          configured: true,
+        })),
+        settings: DEFAULT_SERVER_SETTINGS,
+        windowStartMs: 0,
+        retentionCutoffMs: 0,
+        awaitRefresh: true,
+      });
+      return new Map(
+        sources.map((source) => [
+          source.dir,
+          {
+            files: (source.files ?? []).map((file) => file.path.slice(source.dir.length + 1)),
+            output: (source.files ?? [])
+              .flatMap((file) => file.records)
+              .reduce((total, record) => total + record.totals.outputTokens, 0),
+          },
+        ]),
+      );
+    }).pipe(
+      Effect.provideService(HostProcess.Environment, {}),
+      Effect.provideService(HostProcess.HomeDirectory, home),
+    );
+
+  it.effect("opens OpenCode's database only for a root an instance opted in to", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fileSystem.realPath(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "usage-sign-in-gate-" }),
+      );
+      const shared = path.join(home, "shared");
+      const allowed = path.join(home, "allowed");
+      const denied = path.join(home, "denied");
+      for (const [root, prefix] of [
+        [shared, "shared"],
+        [allowed, "allowed"],
+        [denied, "denied"],
+      ] as const) {
+        yield* writeRoot(root, prefix);
+      }
+      const legacyOnly = { files: ["storage/message/ses/x.json"], output: 7 };
+      const named = (prefix: string, value: typeof legacyOnly) => ({
+        ...value,
+        files: value.files.map((file) => file.replace("x.json", `${prefix}-json.json`)),
+      });
+
+      // A message that exists only in the database stays unread without the opt-in.
+      const sharedOff = yield* scanRoots(home, [
+        { id: "a", environment: { OPENCODE_DATA_DIR: shared } },
+        { id: "b", environment: { OPENCODE_DATA_DIR: shared, T3CODE_READ_AGENT_SIGN_INS: "0" } },
+      ]);
+      assert.deepStrictEqual(sharedOff.get(shared), named("shared", legacyOnly));
+
+      // One opted-in instance on a shared root is enough; the root is still read once.
+      const sharedOn = yield* scanRoots(home, [
+        { id: "a", environment: { OPENCODE_DATA_DIR: shared } },
+        { id: "b", environment: { OPENCODE_DATA_DIR: shared, ...SIGN_IN_READS } },
+      ]);
+      assert.strictEqual(sharedOn.size, 1);
+      assert.deepStrictEqual(sharedOn.get(shared), {
+        files: ["opencode.db", "storage/message/ses/shared-json.json"],
+        output: 18,
+      });
+
+      // Two roots with opposite opt-ins.
+      const split = yield* scanRoots(home, [
+        { id: "allowed", environment: { OPENCODE_DATA_DIR: allowed, ...SIGN_IN_READS } },
+        { id: "denied", environment: { OPENCODE_DATA_DIR: denied } },
+      ]);
+      assert.deepStrictEqual(split.get(allowed), {
+        files: ["opencode.db", "storage/message/ses/allowed-json.json"],
+        output: 18,
+      });
+      assert.deepStrictEqual(split.get(denied), named("denied", legacyOnly));
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("scans canonical instance roots once, including XDG and home defaults", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

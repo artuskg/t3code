@@ -1,4 +1,5 @@
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { agentSignInReadsAllowed } from "@t3tools/provider-core/server/usageLimits";
 import {
   totalTokens,
   type ProviderUsageReader,
@@ -130,6 +131,9 @@ export const readOpenCodeUsage = Effect.fn("readOpenCodeUsage")(function* (
   root: string,
   sinceMs: number,
   retentionCutoffMs = sinceMs,
+  // Privacy fork: OpenCode's database also holds its sign-in, so the usage scan opens it only
+  // for a root some eligible instance has opted in to; the legacy JSON history stays readable.
+  { readDatabases = true }: { readonly readDatabases?: boolean } = {},
 ): Effect.fn.Return<OpenCodeUsageReadResult, never, FileSystem.FileSystem | Path.Path> {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -148,7 +152,9 @@ export const readOpenCodeUsage = Effect.fn("readOpenCodeUsage")(function* (
     records.push(record);
   };
 
-  const databases = yield* fileSystem.readDirectory(root).pipe(
+  const databases = yield* (
+    readDatabases ? fileSystem.readDirectory(root) : Effect.succeed<Array<string>>([])
+  ).pipe(
     Effect.flatMap((names) =>
       Effect.filter(
         names.filter((name) => /^opencode(?:-[a-zA-Z0-9_-]+)?\.db$/.test(name)),
@@ -497,14 +503,18 @@ export const openCodeUsageReader: ProviderUsageReader<OpenCodeSettings, OpenCode
     windowStartMs,
     retentionCutoffMs,
   }) {
-    const roots = new Set<string>();
+    // Canonical root -> whether any instance using it allows opening OpenCode's database.
+    const roots = new Map<string, boolean>();
     for (const instance of instances) {
-      for (const root of yield* resolveOpenCodeDataDirs(instance.environment)) roots.add(root);
+      const readDatabases = agentSignInReadsAllowed(instance.environment);
+      for (const root of yield* resolveOpenCodeDataDirs(instance.environment)) {
+        roots.set(root, (roots.get(root) ?? false) || readDatabases);
+      }
     }
     return yield* Effect.forEach(
       roots,
-      (dir) =>
-        readOpenCodeUsage(dir, windowStartMs, retentionCutoffMs).pipe(
+      ([dir, readDatabases]) =>
+        readOpenCodeUsage(dir, windowStartMs, retentionCutoffMs, { readDatabases }).pipe(
           Effect.map((result) => ({
             dir,
             files: result.missing && !result.error ? null : result.files,
